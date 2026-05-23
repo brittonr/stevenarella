@@ -263,10 +263,13 @@ mod tests {
         let boundaries = [
             (0x14, crate::protocol::packet::play::clientbound::internal_ids::WindowSetSlot_State),
             (0x1c, crate::protocol::packet::play::clientbound::internal_ids::EntityStatus),
-            (0x24, crate::protocol::packet::play::clientbound::internal_ids::ChunkData_AndLight),
+            (0x23, crate::protocol::packet::play::clientbound::internal_ids::KeepAliveClientbound_i64),
+            (0x24, crate::protocol::packet::play::clientbound::internal_ids::ChunkData_AndLight_NoTrustEdges),
             (0x34, crate::protocol::packet::play::clientbound::internal_ids::PlayerAbilities),
             (0x3a, crate::protocol::packet::play::clientbound::internal_ids::PlayerInfo_BitSet),
+            (0x3c, crate::protocol::packet::play::clientbound::internal_ids::TeleportPlayer_WithConfirm),
             (0x4d, crate::protocol::packet::play::clientbound::internal_ids::SetCurrentHotbarSlot),
+            (0x50, crate::protocol::packet::play::clientbound::internal_ids::SpawnPosition_Angle),
             (0x51, crate::protocol::packet::play::clientbound::internal_ids::ScoreboardDisplay),
             (0x52, crate::protocol::packet::play::clientbound::internal_ids::EntityMetadata),
             (0x57, crate::protocol::packet::play::clientbound::internal_ids::UpdateHealth),
@@ -301,6 +304,20 @@ mod tests {
                 "internal id {internal_id} should map back to wire id 0x{wire_id:02x}",
             );
         }
+    }
+
+    #[test]
+    fn protocol_763_maps_play_keep_alive_response() {
+        assert_eq!(
+            translate_internal_packet_id_for_version(
+                763,
+                State::Play,
+                Direction::Serverbound,
+                crate::protocol::packet::play::serverbound::internal_ids::KeepAliveServerbound_i64,
+                false,
+            ),
+            0x12,
+        );
     }
 
     #[test]

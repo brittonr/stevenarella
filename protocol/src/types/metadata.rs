@@ -358,6 +358,100 @@ impl Metadata {
         Ok(m)
     }
 
+    fn read_from1201<R: io::Read>(buf: &mut R) -> Result<Self, protocol::Error> {
+        let mut m = Self::new();
+        loop {
+            let index = u8::read_from(buf)? as i32;
+            if index == 0xFF {
+                break;
+            }
+            let ty = protocol::VarInt::read_from(buf)?.0;
+            match ty {
+                0 => m.put_raw(index, i8::read_from(buf)?),
+                1 => m.put_raw(index, protocol::VarInt::read_from(buf)?.0),
+                2 => m.put_raw(index, protocol::VarLong::read_from(buf)?.0),
+                3 => m.put_raw(index, f32::read_from(buf)?),
+                4 => m.put_raw(index, String::read_from(buf)?),
+                5 => m.put_raw(index, format::Component::read_from(buf)?),
+                6 => m.put_raw(
+                    index,
+                    LenPrefixed::<bool, format::Component>::read_from(buf)?,
+                ),
+                7 => m.put_raw(index, Option::<item::Stack>::read_from(buf)?),
+                8 => m.put_raw(index, bool::read_from(buf)?),
+                9 => m.put_raw(
+                    index,
+                    [
+                        f32::read_from(buf)?,
+                        f32::read_from(buf)?,
+                        f32::read_from(buf)?,
+                    ],
+                ),
+                10 => m.put_raw(index, Position::read_from(buf)?),
+                11 => {
+                    if bool::read_from(buf)? {
+                        m.put_raw(index, Option::<Position>::read_from(buf)?);
+                    } else {
+                        m.put_raw::<Option<Position>>(index, None);
+                    }
+                }
+                12 => m.put_raw(index, protocol::VarInt::read_from(buf)?),
+                13 => {
+                    if bool::read_from(buf)? {
+                        m.put_raw(index, Option::<protocol::UUID>::read_from(buf)?);
+                    } else {
+                        m.put_raw::<Option<protocol::UUID>>(index, None);
+                    }
+                }
+                14 => m.put_raw(index, protocol::VarInt::read_from(buf)?.0 as u16),
+                15 => m.put_raw(index, Option::<protocol::VarInt>::read_from(buf)?),
+                16 => {
+                    let ty = u8::read_from(buf)?;
+                    if ty != 0 {
+                        let name = nbt::read_string(buf)?;
+                        let tag = nbt::Tag::read_from(buf)?;
+                        m.put_raw(index, nbt::NamedTag(name, tag));
+                    }
+                }
+                17 => m.put_raw(index, ParticleData::read_from(buf)?),
+                18 => m.put_raw(index, VillagerData::read_from(buf)?),
+                19 => {
+                    if bool::read_from(buf)? {
+                        m.put_raw(index, Option::<protocol::VarInt>::read_from(buf)?);
+                    } else {
+                        m.put_raw::<Option<protocol::VarInt>>(index, None);
+                    }
+                }
+                20 => m.put_raw(index, PoseData::read_from(buf)?),
+                21 | 22 | 24 | 25 => m.put_raw(index, protocol::VarInt::read_from(buf)?),
+                23 => {
+                    if bool::read_from(buf)? {
+                        let _dimension = String::read_from(buf)?;
+                        m.put_raw(index, Option::<Position>::read_from(buf)?);
+                    } else {
+                        m.put_raw::<Option<Position>>(index, None);
+                    }
+                }
+                26 => m.put_raw(
+                    index,
+                    [
+                        f32::read_from(buf)?,
+                        f32::read_from(buf)?,
+                        f32::read_from(buf)?,
+                    ],
+                ),
+                27 => {
+                    let _x = f32::read_from(buf)?;
+                    let _y = f32::read_from(buf)?;
+                    let _z = f32::read_from(buf)?;
+                    let _w = f32::read_from(buf)?;
+                }
+                _ => return Err(protocol::Error::Err("unknown 1.20.1 metadata type".to_owned())),
+            }
+        }
+        Ok(m)
+    }
+
     fn write_to113<W: io::Write>(&self, buf: &mut W) -> Result<(), protocol::Error> {
         for (k, v) in &self.map {
             (*k as u8).write_to(buf)?;
@@ -455,7 +549,9 @@ impl Serializable for Metadata {
     fn read_from<R: io::Read>(buf: &mut R) -> Result<Self, protocol::Error> {
         let protocol_version = protocol::current_protocol_version();
 
-        if protocol_version >= 404 {
+        if protocol_version >= 763 {
+            Metadata::read_from1201(buf)
+        } else if protocol_version >= 404 {
             Metadata::read_from113(buf)
         } else if protocol_version >= 74 {
             Metadata::read_from19(buf)
@@ -498,6 +594,7 @@ pub enum Value {
     Byte(i8),
     Short(i16),
     Int(i32),
+    Long(i64),
     Float(f32),
     String(String),
     FormatComponent(format::Component),
@@ -756,6 +853,18 @@ impl MetaValue for i32 {
     }
 }
 
+impl MetaValue for i64 {
+    fn unwrap(value: &Value) -> &Self {
+        match *value {
+            Value::Long(ref val) => val,
+            _ => panic!("incorrect key"),
+        }
+    }
+    fn wrap(self) -> Value {
+        Value::Long(self)
+    }
+}
+
 impl MetaValue for f32 {
     fn unwrap(value: &Value) -> &Self {
         match *value {
@@ -921,6 +1030,18 @@ impl MetaValue for nbt::NamedTag {
     }
     fn wrap(self) -> Value {
         Value::NBTTag(self)
+    }
+}
+
+impl MetaValue for ParticleData {
+    fn unwrap(value: &Value) -> &Self {
+        match *value {
+            Value::Particle(ref val) => val,
+            _ => panic!("incorrect key"),
+        }
+    }
+    fn wrap(self) -> Value {
+        Value::Particle(self)
     }
 }
 

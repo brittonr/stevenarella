@@ -4,14 +4,17 @@ const PLAY_CLIENTBOUND_OVERRIDES: &[(i32, i32)] = &[
     (0x10, packet::play::clientbound::internal_ids::DeclareCommands),
     (0x14, packet::play::clientbound::internal_ids::WindowSetSlot_State),
     (0x1c, packet::play::clientbound::internal_ids::EntityStatus),
-    (0x24, packet::play::clientbound::internal_ids::ChunkData_AndLight),
+    (0x23, packet::play::clientbound::internal_ids::KeepAliveClientbound_i64),
+    (0x24, packet::play::clientbound::internal_ids::ChunkData_AndLight_NoTrustEdges),
     (
         0x28,
         packet::play::clientbound::internal_ids::JoinGame_WorldNames_IsHard_SimDist_LastDeath_PortalCooldown,
     ),
     (0x34, packet::play::clientbound::internal_ids::PlayerAbilities),
     (0x3a, packet::play::clientbound::internal_ids::PlayerInfo_BitSet),
+    (0x3c, packet::play::clientbound::internal_ids::TeleportPlayer_WithConfirm),
     (0x4d, packet::play::clientbound::internal_ids::SetCurrentHotbarSlot),
+    (0x50, packet::play::clientbound::internal_ids::SpawnPosition_Angle),
     (0x51, packet::play::clientbound::internal_ids::ScoreboardDisplay),
     (0x52, packet::play::clientbound::internal_ids::EntityMetadata),
     (0x57, packet::play::clientbound::internal_ids::UpdateHealth),
@@ -25,6 +28,11 @@ const PLAY_CLIENTBOUND_OVERRIDES: &[(i32, i32)] = &[
     ),
     (0x6e, packet::play::clientbound::internal_ids::Tags_Nested),
 ];
+
+const PLAY_SERVERBOUND_OVERRIDES: &[(i32, i32)] = &[(
+    0x12,
+    packet::play::serverbound::internal_ids::KeepAliveServerbound_i64,
+)];
 
 const LOGIN_SERVERBOUND_OVERRIDES: &[(i32, i32)] = &[(
     0x00,
@@ -78,6 +86,22 @@ pub fn translate_internal_packet_id(state: State, dir: Direction, id: i32, to_in
                 return *internal_id;
             }
         } else if let Some((wire_id, _)) = PLAY_CLIENTBOUND_OVERRIDES
+            .iter()
+            .find(|(_, internal_id)| *internal_id == id)
+        {
+            return *wire_id;
+        }
+    }
+
+    if state == State::Play && dir == Direction::Serverbound {
+        if to_internal {
+            if let Some((_, internal_id)) = PLAY_SERVERBOUND_OVERRIDES
+                .iter()
+                .find(|(wire_id, _)| *wire_id == id)
+            {
+                return *internal_id;
+            }
+        } else if let Some((wire_id, _)) = PLAY_SERVERBOUND_OVERRIDES
             .iter()
             .find(|(_, internal_id)| *internal_id == id)
         {

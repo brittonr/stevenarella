@@ -1245,7 +1245,13 @@ impl Conn {
             fs::File::create("last-packet")?.write_all(buf.get_ref())?;
         }
 
-        let packet = packet::packet_by_id(self.protocol_version, self.state, dir, id, &mut buf)?;
+        let packet = packet::packet_by_id(self.protocol_version, self.state, dir, id, &mut buf)
+            .map_err(|err| {
+                Error::Err(format!(
+                    "failed to parse packet 0x{:X} state {:?} dir {:?}: {:?}",
+                    id, self.state, dir, err
+                ))
+            })?;
 
         if is_network_debug() {
             debug!("packet = {:?}", packet);

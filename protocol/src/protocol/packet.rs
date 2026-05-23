@@ -1152,6 +1152,19 @@ state_packets!(
                 field sky_light_arrays: LenPrefixed<VarInt, LenPrefixed<VarInt, u8>> =,
                 field block_light_arrays: LenPrefixed<VarInt, LenPrefixed<VarInt, u8>> =,
             }
+            packet ChunkData_AndLight_NoTrustEdges {
+                field chunk_x: i32 =,
+                field chunk_z: i32 =,
+                field heightmaps: Option<nbt::NamedTag> =,
+                field data: LenPrefixedBytes<VarInt> =,
+                field block_entities: LenPrefixed<VarInt, packet::BlockEntityAtPackedLocation> =,
+                field sky_light_mask: LenPrefixed<VarInt, i64> =,
+                field block_light_mask: LenPrefixed<VarInt, i64> =,
+                field empty_sky_light_mask: LenPrefixed<VarInt, i64> =,
+                field empty_block_light_mask: LenPrefixed<VarInt, i64> =,
+                field sky_light_arrays: LenPrefixed<VarInt, LenPrefixed<VarInt, u8>> =,
+                field block_light_arrays: LenPrefixed<VarInt, LenPrefixed<VarInt, u8>> =,
+            }
             packet ChunkData_Biomes3D_Bitmasks {
                 field chunk_x: i32 =,
                 field chunk_z: i32 =,

@@ -685,6 +685,7 @@ impl Server {
                             KeepAliveClientbound_VarInt => on_keep_alive_varint,
                             KeepAliveClientbound_i32 => on_keep_alive_i32,
                             ChunkData_AndLight => on_chunk_data_and_light,
+                            ChunkData_AndLight_NoTrustEdges => on_chunk_data_and_light_no_trust_edges,
                             ChunkData_Biomes3D_Bitmasks => on_chunk_data_biomes3d_bitmasks,
                             ChunkData_Biomes3D_VarInt => on_chunk_data_biomes3d_varint,
                             ChunkData_Biomes3D_bool => on_chunk_data_biomes3d_bool,
@@ -2149,6 +2150,58 @@ impl Server {
         );
 
         // Clear sky light data
+        self.world.clear_light_data(
+            chunk_data.chunk_x,
+            chunk_data.chunk_z,
+            world::LightType::Sky,
+            chunk_data.empty_sky_light_mask.data,
+        );
+    }
+
+    fn on_chunk_data_and_light_no_trust_edges(
+        &mut self,
+        chunk_data: packet::play::clientbound::ChunkData_AndLight_NoTrustEdges,
+    ) {
+        if !self.logged_first_chunk {
+            info!(
+                "MC-COMPAT-MILESTONE first_chunk_data chunk_x={} chunk_z={}",
+                chunk_data.chunk_x, chunk_data.chunk_z
+            );
+            self.logged_first_chunk = true;
+        }
+        self.world
+            .load_chunk118(
+                chunk_data.chunk_x,
+                chunk_data.chunk_z,
+                true,
+                chunk_data.data.data,
+            )
+            .unwrap();
+        //self.load_block_entities(chunk_data.block_entities.data); // TODO: load entities
+
+        self.world.set_light_data(
+            chunk_data.chunk_x,
+            chunk_data.chunk_z,
+            world::LightType::Block,
+            chunk_data.block_light_mask.data,
+            chunk_data.block_light_arrays.data,
+        );
+
+        self.world.set_light_data(
+            chunk_data.chunk_x,
+            chunk_data.chunk_z,
+            world::LightType::Sky,
+            chunk_data.sky_light_mask.data,
+            chunk_data.sky_light_arrays.data,
+        );
+
+        self.world.clear_light_data(
+            chunk_data.chunk_x,
+            chunk_data.chunk_z,
+            world::LightType::Block,
+            chunk_data.empty_block_light_mask.data,
+        );
+
         self.world.clear_light_data(
             chunk_data.chunk_x,
             chunk_data.chunk_z,
