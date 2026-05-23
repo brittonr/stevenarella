@@ -544,10 +544,24 @@ state_packets!(
                 field cursor_z: f32 =,
                 field inside_block: bool =, //1.14 added insideblock
             }
+            packet PlayerBlockPlacement_insideblock_sequence {
+                field hand: VarInt =,
+                field location: Position =,
+                field face: VarInt =,
+                field cursor_x: f32 =,
+                field cursor_y: f32 =,
+                field cursor_z: f32 =,
+                field inside_block: bool =,
+                field sequence: VarInt =,
+            }
 
             /// UseItem is sent when the client tries to use an item.
             packet UseItem {
                 field hand: VarInt =,
+            }
+            packet UseItem_WithSequence {
+                field hand: VarInt =,
+                field sequence: VarInt =,
             }
         }
         clientbound Clientbound {

@@ -80,6 +80,7 @@ pub struct Server {
     logged_first_chunk: bool,
     logged_render_tick_with_player: bool,
     active_probe_enabled: bool,
+    team_probe_enabled: bool,
     active_probe_ticks: u32,
     active_probe_logged_position_look_sent: bool,
 
@@ -582,6 +583,9 @@ impl Server {
             active_probe_enabled: std::env::var("MC_COMPAT_ACTIVE_PROBE")
                 .map(|value| value != "0")
                 .unwrap_or(false),
+            team_probe_enabled: std::env::var("MC_COMPAT_TEAM_PROBE")
+                .map(|value| value != "0")
+                .unwrap_or(false),
             active_probe_ticks: 0,
             active_probe_logged_position_look_sent: false,
             sun_model: None,
@@ -662,7 +666,7 @@ impl Server {
     }
 
     fn apply_mc_compat_active_probe(&mut self) {
-        if !self.active_probe_enabled {
+        if !self.active_probe_enabled && !self.team_probe_enabled {
             return;
         }
 
@@ -670,36 +674,78 @@ impl Server {
             return;
         };
 
-        let Some(movement) = self
+        self.active_probe_ticks = self.active_probe_ticks.saturating_add(1);
+
+        if let Some(movement) = self
             .entities
             .get_component_mut(player, self.player_movement)
-        else {
-            return;
-        };
+        {
+            match self.active_probe_ticks {
+                1 => {
+                    info!("MC-COMPAT-MILESTONE active_probe_input_start forward+sprint+jump");
+                    movement.pressed_keys.insert(Stevenkey::Forward, true);
+                    movement.pressed_keys.insert(Stevenkey::Sprint, true);
+                    movement.pressed_keys.insert(Stevenkey::Jump, true);
+                }
+                18 => {
+                    info!("MC-COMPAT-MILESTONE active_probe_jump_release");
+                    movement.pressed_keys.insert(Stevenkey::Jump, false);
+                }
+                180 => {
+                    info!("MC-COMPAT-MILESTONE active_probe_input_turn right");
+                    movement.pressed_keys.insert(Stevenkey::Right, true);
+                }
+                300 => {
+                    info!("MC-COMPAT-MILESTONE active_probe_input_stop");
+                    movement.pressed_keys.insert(Stevenkey::Forward, false);
+                    movement.pressed_keys.insert(Stevenkey::Sprint, false);
+                    movement.pressed_keys.insert(Stevenkey::Right, false);
+                }
+                _ => {}
+            }
+        }
 
-        self.active_probe_ticks = self.active_probe_ticks.saturating_add(1);
-        match self.active_probe_ticks {
-            1 => {
-                info!("MC-COMPAT-MILESTONE active_probe_input_start forward+sprint+jump");
-                movement.pressed_keys.insert(Stevenkey::Forward, true);
-                movement.pressed_keys.insert(Stevenkey::Sprint, true);
-                movement.pressed_keys.insert(Stevenkey::Jump, true);
+        if self.team_probe_enabled {
+            match self.active_probe_ticks {
+                360 => {
+                    info!("MC-COMPAT-MILESTONE team_probe_enter_red_portal x=-4.0 y=84.0 z=4.0");
+                    if let Some(position) = self.entities.get_component_mut(player, self.position) {
+                        position.position = cgmath::Vector3::new(-4.0, 84.0, 4.0);
+                        position.moved = true;
+                    }
+                    self.write_packet(packet::play::serverbound::PlayerPositionLook {
+                        x: -4.0,
+                        y: 84.0,
+                        z: 4.0,
+                        yaw: 0.0,
+                        pitch: 0.0,
+                        on_ground: true,
+                    });
+                }
+                361..=390 => {
+                    if self.active_probe_ticks == 361 {
+                        info!("MC-COMPAT-MILESTONE team_probe_hold_red_portal start");
+                    }
+                    self.write_packet(packet::play::serverbound::PlayerPosition {
+                        x: -4.0,
+                        y: 84.0,
+                        z: 4.0,
+                        on_ground: true,
+                    });
+                }
+                420 => {
+                    info!("MC-COMPAT-MILESTONE team_probe_select_hotbar_slot slot=0");
+                    self.write_packet(packet::play::serverbound::HeldItemChange { slot: 0 });
+                }
+                450 => {
+                    info!("MC-COMPAT-MILESTONE team_probe_use_item_sent hand=main sequence=0");
+                    self.write_packet(packet::play::serverbound::UseItem_WithSequence {
+                        hand: protocol::VarInt(0),
+                        sequence: protocol::VarInt(0),
+                    });
+                }
+                _ => {}
             }
-            18 => {
-                info!("MC-COMPAT-MILESTONE active_probe_jump_release");
-                movement.pressed_keys.insert(Stevenkey::Jump, false);
-            }
-            180 => {
-                info!("MC-COMPAT-MILESTONE active_probe_input_turn right");
-                movement.pressed_keys.insert(Stevenkey::Right, true);
-            }
-            300 => {
-                info!("MC-COMPAT-MILESTONE active_probe_input_stop");
-                movement.pressed_keys.insert(Stevenkey::Forward, false);
-                movement.pressed_keys.insert(Stevenkey::Sprint, false);
-                movement.pressed_keys.insert(Stevenkey::Right, false);
-            }
-            _ => {}
         }
     }
 
@@ -969,7 +1015,28 @@ impl Server {
                 renderer.view_vector.cast().unwrap(),
                 target::test_block,
             ) {
-                if self.protocol_version >= 477 {
+                if self.protocol_version >= 763 {
+                    self.write_packet(
+                        packet::play::serverbound::PlayerBlockPlacement_insideblock_sequence {
+                            location: pos,
+                            face: protocol::VarInt(match face {
+                                Direction::Down => 0,
+                                Direction::Up => 1,
+                                Direction::North => 2,
+                                Direction::South => 3,
+                                Direction::West => 4,
+                                Direction::East => 5,
+                                _ => unreachable!(),
+                            }),
+                            hand: protocol::VarInt(0),
+                            cursor_x: at.x as f32,
+                            cursor_y: at.y as f32,
+                            cursor_z: at.z as f32,
+                            inside_block: false,
+                            sequence: protocol::VarInt(0),
+                        },
+                    );
+                } else if self.protocol_version >= 477 {
                     self.write_packet(
                         packet::play::serverbound::PlayerBlockPlacement_insideblock {
                             location: pos,

@@ -325,7 +325,27 @@ mod tests {
     }
 
     #[test]
-    fn protocol_763_maps_play_position_look_update() {
+    fn protocol_763_maps_play_position_updates() {
+        assert_eq!(
+            translate_internal_packet_id_for_version(
+                763,
+                State::Play,
+                Direction::Serverbound,
+                crate::protocol::packet::play::serverbound::internal_ids::PlayerPosition,
+                false,
+            ),
+            0x14,
+        );
+        assert_eq!(
+            translate_internal_packet_id_for_version(
+                763,
+                State::Play,
+                Direction::Serverbound,
+                0x14,
+                true,
+            ),
+            crate::protocol::packet::play::serverbound::internal_ids::PlayerPosition,
+        );
         assert_eq!(
             translate_internal_packet_id_for_version(
                 763,
@@ -346,6 +366,51 @@ mod tests {
             ),
             crate::protocol::packet::play::serverbound::internal_ids::PlayerPositionLook,
         );
+    }
+
+    #[test]
+    fn protocol_763_maps_play_interaction_packets() {
+        let boundaries = [
+            (
+                0x10,
+                crate::protocol::packet::play::serverbound::internal_ids::UseEntity_Sneakflag,
+            ),
+            (
+                0x28,
+                crate::protocol::packet::play::serverbound::internal_ids::HeldItemChange,
+            ),
+            (
+                0x31,
+                crate::protocol::packet::play::serverbound::internal_ids::PlayerBlockPlacement_insideblock_sequence,
+            ),
+            (
+                0x32,
+                crate::protocol::packet::play::serverbound::internal_ids::UseItem_WithSequence,
+            ),
+        ];
+
+        for (wire_id, internal_id) in boundaries {
+            assert_eq!(
+                translate_internal_packet_id_for_version(
+                    763,
+                    State::Play,
+                    Direction::Serverbound,
+                    internal_id,
+                    false,
+                ),
+                wire_id,
+            );
+            assert_eq!(
+                translate_internal_packet_id_for_version(
+                    763,
+                    State::Play,
+                    Direction::Serverbound,
+                    wire_id,
+                    true,
+                ),
+                internal_id,
+            );
+        }
     }
 
     #[test]

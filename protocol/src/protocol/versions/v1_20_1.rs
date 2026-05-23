@@ -34,8 +34,16 @@ const PLAY_CLIENTBOUND_OVERRIDES: &[(i32, i32)] = &[
 ];
 
 const PLAY_SERVERBOUND_OVERRIDES: &[(i32, i32)] = &[
+    (0x10, packet::play::serverbound::internal_ids::UseEntity_Sneakflag),
     (0x12, packet::play::serverbound::internal_ids::KeepAliveServerbound_i64),
+    (0x14, packet::play::serverbound::internal_ids::PlayerPosition),
     (0x15, packet::play::serverbound::internal_ids::PlayerPositionLook),
+    (0x28, packet::play::serverbound::internal_ids::HeldItemChange),
+    (
+        0x31,
+        packet::play::serverbound::internal_ids::PlayerBlockPlacement_insideblock_sequence,
+    ),
+    (0x32, packet::play::serverbound::internal_ids::UseItem_WithSequence),
 ];
 
 const LOGIN_SERVERBOUND_OVERRIDES: &[(i32, i32)] = &[(
