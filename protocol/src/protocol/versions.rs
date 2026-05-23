@@ -161,4 +161,30 @@ mod tests {
             translate_internal_packet_id_for_version(758, State::Play, Direction::Clientbound, 0x28, true),
         );
     }
+
+    #[test]
+    fn protocol_763_maps_valence_command_tree_boundary() {
+        assert_eq!(
+            translate_internal_packet_id_for_version(763, State::Play, Direction::Clientbound, 0x10, true),
+            crate::protocol::packet::play::clientbound::internal_ids::DeclareCommands,
+        );
+        assert_eq!(
+            translate_internal_packet_id_for_version(
+                763,
+                State::Play,
+                Direction::Clientbound,
+                crate::protocol::packet::play::clientbound::internal_ids::DeclareCommands,
+                false,
+            ),
+            0x10,
+        );
+    }
+
+    #[test]
+    fn protocol_763_no_longer_treats_play_0x10_as_clear_titles() {
+        assert_ne!(
+            translate_internal_packet_id_for_version(763, State::Play, Direction::Clientbound, 0x10, true),
+            translate_internal_packet_id_for_version(758, State::Play, Direction::Clientbound, 0x10, true),
+        );
+    }
 }
