@@ -18,6 +18,7 @@ mod v1_16_4;
 mod v1_17_1;
 mod v1_18_1;
 mod v1_18_2;
+mod v1_20_1;
 mod v1_7_10;
 mod v1_8_9;
 mod v1_9;
@@ -76,7 +77,7 @@ pub fn translate_internal_packet_id_for_version(
     to_internal: bool,
 ) -> i32 {
     match version {
-        763 => v1_18_2::translate_internal_packet_id(state, dir, id, to_internal),
+        763 => v1_20_1::translate_internal_packet_id(state, dir, id, to_internal),
         758 => v1_18_2::translate_internal_packet_id(state, dir, id, to_internal),
         757 => v1_18_1::translate_internal_packet_id(state, dir, id, to_internal),
         756 => v1_17_1::translate_internal_packet_id(state, dir, id, to_internal),
@@ -116,7 +117,7 @@ mod tests {
     }
 
     #[test]
-    fn protocol_763_currently_reuses_1_18_2_packet_translation() {
+    fn protocol_763_reuses_1_18_2_handshake_translation() {
         assert_eq!(
             translate_internal_packet_id_for_version(
                 763,
@@ -132,6 +133,32 @@ mod tests {
                 0,
                 true,
             )
+        );
+    }
+
+    #[test]
+    fn protocol_763_maps_valence_game_join_boundary() {
+        assert_eq!(
+            translate_internal_packet_id_for_version(763, State::Play, Direction::Clientbound, 0x28, true),
+            crate::protocol::packet::play::clientbound::internal_ids::JoinGame_WorldNames_IsHard_SimDist,
+        );
+        assert_eq!(
+            translate_internal_packet_id_for_version(
+                763,
+                State::Play,
+                Direction::Clientbound,
+                crate::protocol::packet::play::clientbound::internal_ids::JoinGame_WorldNames_IsHard_SimDist,
+                false,
+            ),
+            0x28,
+        );
+    }
+
+    #[test]
+    fn protocol_763_no_longer_treats_play_0x28_as_trade_list() {
+        assert_ne!(
+            translate_internal_packet_id_for_version(763, State::Play, Direction::Clientbound, 0x28, true),
+            translate_internal_packet_id_for_version(758, State::Play, Direction::Clientbound, 0x28, true),
         );
     }
 }
