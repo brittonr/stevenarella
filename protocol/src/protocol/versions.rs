@@ -280,6 +280,7 @@ mod tests {
             (0x39, crate::protocol::packet::play::clientbound::internal_ids::PlayerRemove_UUIDs),
             (0x3a, crate::protocol::packet::play::clientbound::internal_ids::PlayerInfo_BitSet),
             (0x3c, crate::protocol::packet::play::clientbound::internal_ids::TeleportPlayer_WithConfirm),
+            (0x41, crate::protocol::packet::play::clientbound::internal_ids::Respawn_WorldNames_LastDeath_PortalCooldown),
             (0x42, crate::protocol::packet::play::clientbound::internal_ids::EntityHeadLook),
             (0x4d, crate::protocol::packet::play::clientbound::internal_ids::SetCurrentHotbarSlot),
             (0x4e, crate::protocol::packet::play::clientbound::internal_ids::UpdateViewPosition),
@@ -389,6 +390,10 @@ mod tests {
     #[test]
     fn protocol_763_maps_play_interaction_packets() {
         let boundaries = [
+            (
+                0x07,
+                crate::protocol::packet::play::serverbound::internal_ids::ClientStatus,
+            ),
             (
                 0x10,
                 crate::protocol::packet::play::serverbound::internal_ids::UseEntity_Sneakflag,

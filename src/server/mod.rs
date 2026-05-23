@@ -82,9 +82,13 @@ pub struct Server {
     active_probe_enabled: bool,
     team_probe_enabled: bool,
     combat_probe_enabled: bool,
+    respawn_probe_enabled: bool,
     active_probe_ticks: u32,
     active_probe_logged_position_look_sent: bool,
     combat_probe_attacks_sent: u32,
+    respawn_probe_requested: bool,
+    respawn_probe_death_seen: bool,
+    respawn_probe_restored_seen: bool,
     remote_player_entity_ids: Vec<i32>,
 
     sun_model: Option<sun::SunModel>,
@@ -592,9 +596,15 @@ impl Server {
             combat_probe_enabled: std::env::var("MC_COMPAT_COMBAT_PROBE")
                 .map(|value| value != "0")
                 .unwrap_or(false),
+            respawn_probe_enabled: std::env::var("MC_COMPAT_RESPAWN_PROBE")
+                .map(|value| value != "0")
+                .unwrap_or(false),
             active_probe_ticks: 0,
             active_probe_logged_position_look_sent: false,
             combat_probe_attacks_sent: 0,
+            respawn_probe_requested: false,
+            respawn_probe_death_seen: false,
+            respawn_probe_restored_seen: false,
             remote_player_entity_ids: Vec::new(),
             sun_model: None,
 
@@ -674,7 +684,11 @@ impl Server {
     }
 
     fn apply_mc_compat_active_probe(&mut self) {
-        if !self.active_probe_enabled && !self.team_probe_enabled && !self.combat_probe_enabled {
+        if !self.active_probe_enabled
+            && !self.team_probe_enabled
+            && !self.combat_probe_enabled
+            && !self.respawn_probe_enabled
+        {
             return;
         }
 
@@ -806,7 +820,7 @@ impl Server {
                 }
 
                 if self.active_probe_ticks >= 720
-                    && self.combat_probe_attacks_sent < 6
+                    && self.combat_probe_attacks_sent < 10
                     && self.active_probe_ticks % 20 == 0
                 {
                     if let Some(target_id) = self.remote_player_entity_ids.first().copied() {
@@ -858,6 +872,7 @@ impl Server {
                             Respawn_Gamemode => on_respawn_gamemode,
                             Respawn_HashedSeed => on_respawn_hashedseed,
                             Respawn_WorldName => on_respawn_worldname,
+                            Respawn_WorldNames_LastDeath_PortalCooldown => on_respawn_worldnames_lastdeath_portal,
                             Respawn_NBT => on_respawn_nbt,
                             KeepAliveClientbound_i64 => on_keep_alive_i64,
                             KeepAliveClientbound_VarInt => on_keep_alive_varint,
@@ -1483,6 +1498,17 @@ impl Server {
         self.respawn(respawn.gamemode)
     }
 
+    fn on_respawn_worldnames_lastdeath_portal(
+        &mut self,
+        respawn: packet::play::clientbound::Respawn_WorldNames_LastDeath_PortalCooldown,
+    ) {
+        info!(
+            "MC-COMPAT-MILESTONE respawn_packet_763_shape dimension_type={} world={} portal_cooldown={}",
+            respawn.dimension_type_name, respawn.world_name, respawn.portal_cooldown.0
+        );
+        self.respawn(respawn.gamemode)
+    }
+
     fn on_respawn_nbt(&mut self, respawn: packet::play::clientbound::Respawn_NBT) {
         self.respawn(respawn.gamemode)
     }
@@ -1916,8 +1942,28 @@ impl Server {
             update.health, update.food.0, update.food_saturation
         );
         if self.combat_probe_enabled && update.health <= 0.0 {
+            self.respawn_probe_death_seen = true;
             info!(
                 "MC-COMPAT-MILESTONE combat_probe_death_observed health={:.1}",
+                update.health
+            );
+
+            if self.respawn_probe_enabled && !self.respawn_probe_requested {
+                self.write_packet(packet::play::serverbound::ClientStatus {
+                    action_id: protocol::VarInt(0),
+                });
+                self.respawn_probe_requested = true;
+                info!("MC-COMPAT-MILESTONE respawn_probe_request_sent action_id=0");
+            }
+        } else if self.respawn_probe_enabled
+            && self.respawn_probe_requested
+            && self.respawn_probe_death_seen
+            && !self.respawn_probe_restored_seen
+            && update.health > 0.0
+        {
+            self.respawn_probe_restored_seen = true;
+            info!(
+                "MC-COMPAT-MILESTONE respawn_probe_health_restored health={:.1}",
                 update.health
             );
         }

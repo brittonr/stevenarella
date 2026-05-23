@@ -1951,6 +1951,20 @@ state_packets!(
                 field is_flat: bool =,
                 field copy_metadata: bool =,
             }
+            packet Respawn_WorldNames_LastDeath_PortalCooldown {
+                field dimension_type_name: String =,
+                field world_name: String =,
+                field hashed_seed: i64 =,
+                field gamemode: u8 =,
+                field previous_gamemode: u8 =,
+                field is_debug: bool =,
+                field is_flat: bool =,
+                field copy_metadata: bool =,
+                field has_last_death_location: bool =,
+                field last_death_dimension: String = when(|p: &Respawn_WorldNames_LastDeath_PortalCooldown| p.has_last_death_location),
+                field last_death_position: Position = when(|p: &Respawn_WorldNames_LastDeath_PortalCooldown| p.has_last_death_location),
+                field portal_cooldown: VarInt =,
+            }
             /// EntityHeadLook rotates an entity's head to the new angle.
             packet EntityHeadLook {
                 field entity_id: VarInt =,

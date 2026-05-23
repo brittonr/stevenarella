@@ -25,6 +25,10 @@ const PLAY_CLIENTBOUND_OVERRIDES: &[(i32, i32)] = &[
     (0x39, packet::play::clientbound::internal_ids::PlayerRemove_UUIDs),
     (0x3a, packet::play::clientbound::internal_ids::PlayerInfo_BitSet),
     (0x3c, packet::play::clientbound::internal_ids::TeleportPlayer_WithConfirm),
+    (
+        0x41,
+        packet::play::clientbound::internal_ids::Respawn_WorldNames_LastDeath_PortalCooldown,
+    ),
     (0x42, packet::play::clientbound::internal_ids::EntityHeadLook),
     (0x4d, packet::play::clientbound::internal_ids::SetCurrentHotbarSlot),
     (0x4e, packet::play::clientbound::internal_ids::UpdateViewPosition),
@@ -51,6 +55,7 @@ const PLAY_CLIENTBOUND_OVERRIDES: &[(i32, i32)] = &[
 ];
 
 const PLAY_SERVERBOUND_OVERRIDES: &[(i32, i32)] = &[
+    (0x07, packet::play::serverbound::internal_ids::ClientStatus),
     (0x10, packet::play::serverbound::internal_ids::UseEntity_Sneakflag),
     (0x12, packet::play::serverbound::internal_ids::KeepAliveServerbound_i64),
     (0x14, packet::play::serverbound::internal_ids::PlayerPosition),
