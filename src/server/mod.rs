@@ -79,6 +79,9 @@ pub struct Server {
     pub received_chat_at: Option<Instant>,
     logged_first_chunk: bool,
     logged_render_tick_with_player: bool,
+    active_probe_enabled: bool,
+    active_probe_ticks: u32,
+    active_probe_logged_position_look_sent: bool,
 
     sun_model: Option<sun::SunModel>,
     target_info: target::Info,
@@ -576,6 +579,11 @@ impl Server {
             received_chat_at: None,
             logged_first_chunk: false,
             logged_render_tick_with_player: false,
+            active_probe_enabled: std::env::var("MC_COMPAT_ACTIVE_PROBE")
+                .map(|value| value != "0")
+                .unwrap_or(false),
+            active_probe_ticks: 0,
+            active_probe_logged_position_look_sent: false,
             sun_model: None,
 
             target_info: target::Info::new(),
@@ -615,6 +623,7 @@ impl Server {
             renderer.camera.yaw = rotation.yaw;
             renderer.camera.pitch = rotation.pitch;
         }
+        self.apply_mc_compat_active_probe();
         self.entity_tick(renderer, delta);
 
         self.tick_timer += delta;
@@ -649,6 +658,48 @@ impl Server {
             }
         } else {
             self.target_info.clear(renderer);
+        }
+    }
+
+    fn apply_mc_compat_active_probe(&mut self) {
+        if !self.active_probe_enabled {
+            return;
+        }
+
+        let Some(player) = self.player else {
+            return;
+        };
+
+        let Some(movement) = self
+            .entities
+            .get_component_mut(player, self.player_movement)
+        else {
+            return;
+        };
+
+        self.active_probe_ticks = self.active_probe_ticks.saturating_add(1);
+        match self.active_probe_ticks {
+            1 => {
+                info!("MC-COMPAT-MILESTONE active_probe_input_start forward+sprint+jump");
+                movement.pressed_keys.insert(Stevenkey::Forward, true);
+                movement.pressed_keys.insert(Stevenkey::Sprint, true);
+                movement.pressed_keys.insert(Stevenkey::Jump, true);
+            }
+            18 => {
+                info!("MC-COMPAT-MILESTONE active_probe_jump_release");
+                movement.pressed_keys.insert(Stevenkey::Jump, false);
+            }
+            180 => {
+                info!("MC-COMPAT-MILESTONE active_probe_input_turn right");
+                movement.pressed_keys.insert(Stevenkey::Right, true);
+            }
+            300 => {
+                info!("MC-COMPAT-MILESTONE active_probe_input_stop");
+                movement.pressed_keys.insert(Stevenkey::Forward, false);
+                movement.pressed_keys.insert(Stevenkey::Sprint, false);
+                movement.pressed_keys.insert(Stevenkey::Right, false);
+            }
+            _ => {}
         }
     }
 
@@ -857,6 +908,13 @@ impl Server {
                     on_ground,
                 };
                 self.write_packet(packet);
+                if self.active_probe_enabled && !self.active_probe_logged_position_look_sent {
+                    info!(
+                        "MC-COMPAT-MILESTONE active_probe_position_look_sent x={:.3} y={:.3} z={:.3} on_ground={}",
+                        position.position.x, position.position.y, position.position.z, on_ground
+                    );
+                    self.active_probe_logged_position_look_sent = true;
+                }
             } else {
                 let packet = packet::play::serverbound::PlayerPositionLook_HeadY {
                     x: position.position.x,

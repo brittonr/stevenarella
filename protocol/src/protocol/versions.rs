@@ -263,12 +263,16 @@ mod tests {
         let boundaries = [
             (0x14, crate::protocol::packet::play::clientbound::internal_ids::WindowSetSlot_State),
             (0x1c, crate::protocol::packet::play::clientbound::internal_ids::EntityStatus),
+            (0x1e, crate::protocol::packet::play::clientbound::internal_ids::ChunkUnload),
+            (0x1f, crate::protocol::packet::play::clientbound::internal_ids::ChangeGameState),
             (0x23, crate::protocol::packet::play::clientbound::internal_ids::KeepAliveClientbound_i64),
             (0x24, crate::protocol::packet::play::clientbound::internal_ids::ChunkData_AndLight_NoTrustEdges),
             (0x34, crate::protocol::packet::play::clientbound::internal_ids::PlayerAbilities),
             (0x3a, crate::protocol::packet::play::clientbound::internal_ids::PlayerInfo_BitSet),
             (0x3c, crate::protocol::packet::play::clientbound::internal_ids::TeleportPlayer_WithConfirm),
             (0x4d, crate::protocol::packet::play::clientbound::internal_ids::SetCurrentHotbarSlot),
+            (0x4e, crate::protocol::packet::play::clientbound::internal_ids::UpdateViewPosition),
+            (0x4f, crate::protocol::packet::play::clientbound::internal_ids::UpdateViewDistance),
             (0x50, crate::protocol::packet::play::clientbound::internal_ids::SpawnPosition_Angle),
             (0x51, crate::protocol::packet::play::clientbound::internal_ids::ScoreboardDisplay),
             (0x52, crate::protocol::packet::play::clientbound::internal_ids::EntityMetadata),
@@ -321,8 +325,32 @@ mod tests {
     }
 
     #[test]
+    fn protocol_763_maps_play_position_look_update() {
+        assert_eq!(
+            translate_internal_packet_id_for_version(
+                763,
+                State::Play,
+                Direction::Serverbound,
+                crate::protocol::packet::play::serverbound::internal_ids::PlayerPositionLook,
+                false,
+            ),
+            0x15,
+        );
+        assert_eq!(
+            translate_internal_packet_id_for_version(
+                763,
+                State::Play,
+                Direction::Serverbound,
+                0x15,
+                true,
+            ),
+            crate::protocol::packet::play::serverbound::internal_ids::PlayerPositionLook,
+        );
+    }
+
+    #[test]
     fn protocol_763_no_longer_uses_758_fallback_for_remaining_observed_boundaries() {
-        for wire_id in [0x14, 0x1c, 0x24, 0x34, 0x3a, 0x4d, 0x51, 0x52, 0x57, 0x58, 0x5b] {
+        for wire_id in [0x14, 0x1c, 0x1e, 0x1f, 0x24, 0x34, 0x3a, 0x4d, 0x4e, 0x4f, 0x51, 0x52, 0x57, 0x58, 0x5b] {
             assert_ne!(
                 translate_internal_packet_id_for_version(
                     763,

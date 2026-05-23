@@ -4,6 +4,8 @@ const PLAY_CLIENTBOUND_OVERRIDES: &[(i32, i32)] = &[
     (0x10, packet::play::clientbound::internal_ids::DeclareCommands),
     (0x14, packet::play::clientbound::internal_ids::WindowSetSlot_State),
     (0x1c, packet::play::clientbound::internal_ids::EntityStatus),
+    (0x1e, packet::play::clientbound::internal_ids::ChunkUnload),
+    (0x1f, packet::play::clientbound::internal_ids::ChangeGameState),
     (0x23, packet::play::clientbound::internal_ids::KeepAliveClientbound_i64),
     (0x24, packet::play::clientbound::internal_ids::ChunkData_AndLight_NoTrustEdges),
     (
@@ -14,6 +16,8 @@ const PLAY_CLIENTBOUND_OVERRIDES: &[(i32, i32)] = &[
     (0x3a, packet::play::clientbound::internal_ids::PlayerInfo_BitSet),
     (0x3c, packet::play::clientbound::internal_ids::TeleportPlayer_WithConfirm),
     (0x4d, packet::play::clientbound::internal_ids::SetCurrentHotbarSlot),
+    (0x4e, packet::play::clientbound::internal_ids::UpdateViewPosition),
+    (0x4f, packet::play::clientbound::internal_ids::UpdateViewDistance),
     (0x50, packet::play::clientbound::internal_ids::SpawnPosition_Angle),
     (0x51, packet::play::clientbound::internal_ids::ScoreboardDisplay),
     (0x52, packet::play::clientbound::internal_ids::EntityMetadata),
@@ -29,10 +33,10 @@ const PLAY_CLIENTBOUND_OVERRIDES: &[(i32, i32)] = &[
     (0x6e, packet::play::clientbound::internal_ids::Tags_Nested),
 ];
 
-const PLAY_SERVERBOUND_OVERRIDES: &[(i32, i32)] = &[(
-    0x12,
-    packet::play::serverbound::internal_ids::KeepAliveServerbound_i64,
-)];
+const PLAY_SERVERBOUND_OVERRIDES: &[(i32, i32)] = &[
+    (0x12, packet::play::serverbound::internal_ids::KeepAliveServerbound_i64),
+    (0x15, packet::play::serverbound::internal_ids::PlayerPositionLook),
+];
 
 const LOGIN_SERVERBOUND_OVERRIDES: &[(i32, i32)] = &[(
     0x00,
