@@ -622,6 +622,21 @@ state_packets!(
                 field velocity_y: i16 =,
                 field velocity_z: i16 =,
             }
+            packet SpawnObject_VarInt_HeadYaw {
+                field entity_id: VarInt =,
+                field uuid: UUID =,
+                field ty: VarInt =,
+                field x: f64 =,
+                field y: f64 =,
+                field z: f64 =,
+                field pitch: i8 =,
+                field yaw: i8 =,
+                field head_yaw: i8 =,
+                field data: VarInt =,
+                field velocity_x: i16 =,
+                field velocity_y: i16 =,
+                field velocity_z: i16 =,
+            }
             /// SpawnExperienceOrb spawns a single experience orb into the world when
             /// it is in range of the client. The count controls the amount of experience
             /// gained when collected.

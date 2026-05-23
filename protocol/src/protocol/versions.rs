@@ -261,24 +261,40 @@ mod tests {
     #[test]
     fn protocol_763_maps_remaining_observed_valence_boundaries() {
         let boundaries = [
+            (0x01, crate::protocol::packet::play::clientbound::internal_ids::SpawnObject_VarInt_HeadYaw),
+            (0x02, crate::protocol::packet::play::clientbound::internal_ids::SpawnExperienceOrb),
+            (0x03, crate::protocol::packet::play::clientbound::internal_ids::SpawnPlayer_f64_NoMeta),
+            (0x04, crate::protocol::packet::play::clientbound::internal_ids::Animation),
             (0x14, crate::protocol::packet::play::clientbound::internal_ids::WindowSetSlot_State),
             (0x1c, crate::protocol::packet::play::clientbound::internal_ids::EntityStatus),
             (0x1e, crate::protocol::packet::play::clientbound::internal_ids::ChunkUnload),
             (0x1f, crate::protocol::packet::play::clientbound::internal_ids::ChangeGameState),
             (0x23, crate::protocol::packet::play::clientbound::internal_ids::KeepAliveClientbound_i64),
             (0x24, crate::protocol::packet::play::clientbound::internal_ids::ChunkData_AndLight_NoTrustEdges),
+            (0x2b, crate::protocol::packet::play::clientbound::internal_ids::EntityMove_i16),
+            (0x2c, crate::protocol::packet::play::clientbound::internal_ids::EntityLookAndMove_i16),
+            (0x2d, crate::protocol::packet::play::clientbound::internal_ids::EntityLook_VarInt),
+            (0x2e, crate::protocol::packet::play::clientbound::internal_ids::VehicleTeleport),
             (0x34, crate::protocol::packet::play::clientbound::internal_ids::PlayerAbilities),
             (0x3a, crate::protocol::packet::play::clientbound::internal_ids::PlayerInfo_BitSet),
             (0x3c, crate::protocol::packet::play::clientbound::internal_ids::TeleportPlayer_WithConfirm),
+            (0x42, crate::protocol::packet::play::clientbound::internal_ids::EntityHeadLook),
             (0x4d, crate::protocol::packet::play::clientbound::internal_ids::SetCurrentHotbarSlot),
             (0x4e, crate::protocol::packet::play::clientbound::internal_ids::UpdateViewPosition),
             (0x4f, crate::protocol::packet::play::clientbound::internal_ids::UpdateViewDistance),
             (0x50, crate::protocol::packet::play::clientbound::internal_ids::SpawnPosition_Angle),
             (0x51, crate::protocol::packet::play::clientbound::internal_ids::ScoreboardDisplay),
             (0x52, crate::protocol::packet::play::clientbound::internal_ids::EntityMetadata),
+            (0x53, crate::protocol::packet::play::clientbound::internal_ids::EntityAttach),
+            (0x54, crate::protocol::packet::play::clientbound::internal_ids::EntityVelocity),
+            (0x55, crate::protocol::packet::play::clientbound::internal_ids::EntityEquipment_Array),
+            (0x56, crate::protocol::packet::play::clientbound::internal_ids::SetExperience),
             (0x57, crate::protocol::packet::play::clientbound::internal_ids::UpdateHealth),
             (0x58, crate::protocol::packet::play::clientbound::internal_ids::ScoreboardObjective),
             (0x5b, crate::protocol::packet::play::clientbound::internal_ids::UpdateScore_VarInt),
+            (0x64, crate::protocol::packet::play::clientbound::internal_ids::ServerMessage_Position),
+            (0x67, crate::protocol::packet::play::clientbound::internal_ids::CollectItem),
+            (0x68, crate::protocol::packet::play::clientbound::internal_ids::EntityTeleport_f64),
             (0x69, crate::protocol::packet::play::clientbound::internal_ids::Advancements),
             (0x6a, crate::protocol::packet::play::clientbound::internal_ids::EntityProperties_VarIntVarInt),
             (0x6e, crate::protocol::packet::play::clientbound::internal_ids::Tags_Nested),
@@ -415,7 +431,7 @@ mod tests {
 
     #[test]
     fn protocol_763_no_longer_uses_758_fallback_for_remaining_observed_boundaries() {
-        for wire_id in [0x14, 0x1c, 0x1e, 0x1f, 0x24, 0x34, 0x3a, 0x4d, 0x4e, 0x4f, 0x51, 0x52, 0x57, 0x58, 0x5b] {
+        for wire_id in [0x01, 0x02, 0x03, 0x04, 0x14, 0x1c, 0x1e, 0x1f, 0x24, 0x2b, 0x2c, 0x2d, 0x2e, 0x34, 0x3a, 0x42, 0x4d, 0x4e, 0x4f, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x5b, 0x67] {
             assert_ne!(
                 translate_internal_packet_id_for_version(
                     763,
