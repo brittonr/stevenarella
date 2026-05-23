@@ -1784,6 +1784,13 @@ state_packets!(
             packet PlayerInfo_BitSet {
                 field inner: packet::PlayerInfoData_BitSet =,
             }
+            packet PlayerRemove_UUIDs {
+                field uuids: LenPrefixed<VarInt, UUID> =,
+            }
+            packet DeathMessage_VarInt {
+                field player_id: VarInt =,
+                field message: format::Component =,
+            }
             packet PlayerInfo_String {
                 field name: String =,
                 field online: bool =,

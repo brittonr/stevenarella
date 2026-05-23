@@ -21,6 +21,8 @@ const PLAY_CLIENTBOUND_OVERRIDES: &[(i32, i32)] = &[
     (0x2d, packet::play::clientbound::internal_ids::EntityLook_VarInt),
     (0x2e, packet::play::clientbound::internal_ids::VehicleTeleport),
     (0x34, packet::play::clientbound::internal_ids::PlayerAbilities),
+    (0x38, packet::play::clientbound::internal_ids::DeathMessage_VarInt),
+    (0x39, packet::play::clientbound::internal_ids::PlayerRemove_UUIDs),
     (0x3a, packet::play::clientbound::internal_ids::PlayerInfo_BitSet),
     (0x3c, packet::play::clientbound::internal_ids::TeleportPlayer_WithConfirm),
     (0x42, packet::play::clientbound::internal_ids::EntityHeadLook),

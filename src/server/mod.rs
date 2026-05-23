@@ -81,8 +81,11 @@ pub struct Server {
     logged_render_tick_with_player: bool,
     active_probe_enabled: bool,
     team_probe_enabled: bool,
+    combat_probe_enabled: bool,
     active_probe_ticks: u32,
     active_probe_logged_position_look_sent: bool,
+    combat_probe_attacks_sent: u32,
+    remote_player_entity_ids: Vec<i32>,
 
     sun_model: Option<sun::SunModel>,
     target_info: target::Info,
@@ -586,8 +589,13 @@ impl Server {
             team_probe_enabled: std::env::var("MC_COMPAT_TEAM_PROBE")
                 .map(|value| value != "0")
                 .unwrap_or(false),
+            combat_probe_enabled: std::env::var("MC_COMPAT_COMBAT_PROBE")
+                .map(|value| value != "0")
+                .unwrap_or(false),
             active_probe_ticks: 0,
             active_probe_logged_position_look_sent: false,
+            combat_probe_attacks_sent: 0,
+            remote_player_entity_ids: Vec::new(),
             sun_model: None,
 
             target_info: target::Info::new(),
@@ -666,7 +674,7 @@ impl Server {
     }
 
     fn apply_mc_compat_active_probe(&mut self) {
-        if !self.active_probe_enabled && !self.team_probe_enabled {
+        if !self.active_probe_enabled && !self.team_probe_enabled && !self.combat_probe_enabled {
             return;
         }
 
@@ -706,17 +714,28 @@ impl Server {
         }
 
         if self.team_probe_enabled {
+            let team = std::env::var("MC_COMPAT_TEAM_PROBE_TEAM")
+                .unwrap_or_else(|_| "red".to_string())
+                .to_ascii_lowercase();
+            let (team_name, portal_x, portal_z) = if team == "blue" {
+                ("blue", 4.0, 4.0)
+            } else {
+                ("red", -4.0, 4.0)
+            };
             match self.active_probe_ticks {
                 360 => {
-                    info!("MC-COMPAT-MILESTONE team_probe_enter_red_portal x=-4.0 y=84.0 z=4.0");
+                    info!(
+                        "MC-COMPAT-MILESTONE team_probe_enter_{}_portal x={:.1} y=84.0 z={:.1}",
+                        team_name, portal_x, portal_z
+                    );
                     if let Some(position) = self.entities.get_component_mut(player, self.position) {
-                        position.position = cgmath::Vector3::new(-4.0, 84.0, 4.0);
+                        position.position = cgmath::Vector3::new(portal_x, 84.0, portal_z);
                         position.moved = true;
                     }
                     self.write_packet(packet::play::serverbound::PlayerPositionLook {
-                        x: -4.0,
+                        x: portal_x,
                         y: 84.0,
-                        z: 4.0,
+                        z: portal_z,
                         yaw: 0.0,
                         pitch: 0.0,
                         on_ground: true,
@@ -724,12 +743,15 @@ impl Server {
                 }
                 361..=390 => {
                     if self.active_probe_ticks == 361 {
-                        info!("MC-COMPAT-MILESTONE team_probe_hold_red_portal start");
+                        info!(
+                            "MC-COMPAT-MILESTONE team_probe_hold_{}_portal start",
+                            team_name
+                        );
                     }
                     self.write_packet(packet::play::serverbound::PlayerPosition {
-                        x: -4.0,
+                        x: portal_x,
                         y: 84.0,
-                        z: 4.0,
+                        z: portal_z,
                         on_ground: true,
                     });
                 }
@@ -745,6 +767,65 @@ impl Server {
                     });
                 }
                 _ => {}
+            }
+        }
+
+        if self.combat_probe_enabled {
+            let role = std::env::var("MC_COMPAT_COMBAT_PROBE_ROLE")
+                .unwrap_or_else(|_| "attacker".to_string())
+                .to_ascii_lowercase();
+
+            if role == "attacker" {
+                match self.active_probe_ticks {
+                    620 => {
+                        info!("MC-COMPAT-MILESTONE combat_probe_move_near_blue_spawn x=38.0 y=65.0 z=0.0");
+                        if let Some(position) =
+                            self.entities.get_component_mut(player, self.position)
+                        {
+                            position.position = cgmath::Vector3::new(38.0, 65.0, 0.0);
+                            position.moved = true;
+                        }
+                        self.write_packet(packet::play::serverbound::PlayerPositionLook {
+                            x: 38.0,
+                            y: 65.0,
+                            z: 0.0,
+                            yaw: -90.0,
+                            pitch: 0.0,
+                            on_ground: true,
+                        });
+                    }
+                    621..=700 => {
+                        self.write_packet(packet::play::serverbound::PlayerPosition {
+                            x: 38.0,
+                            y: 65.0,
+                            z: 0.0,
+                            on_ground: true,
+                        });
+                    }
+                    _ => {}
+                }
+
+                if self.active_probe_ticks >= 720
+                    && self.combat_probe_attacks_sent < 6
+                    && self.active_probe_ticks % 20 == 0
+                {
+                    if let Some(target_id) = self.remote_player_entity_ids.first().copied() {
+                        self.write_packet(packet::play::serverbound::UseEntity_Sneakflag {
+                            target_id: protocol::VarInt(target_id),
+                            ty: protocol::VarInt(1),
+                            target_x: 0.0,
+                            target_y: 0.0,
+                            target_z: 0.0,
+                            hand: protocol::VarInt(0),
+                            sneaking: false,
+                        });
+                        self.combat_probe_attacks_sent += 1;
+                        info!(
+                            "MC-COMPAT-MILESTONE combat_probe_attack_sent target_id={} count={}",
+                            target_id, self.combat_probe_attacks_sent
+                        );
+                    }
+                }
             }
         }
     }
@@ -806,6 +887,9 @@ impl Server {
                             TeleportPlayer_OnGround => on_teleport_player_onground,
                             TimeUpdate => on_time_update,
                             ChangeGameState => on_game_state_change,
+                            UpdateHealth => on_update_health,
+                            DeathMessage_VarInt => on_death_message_varint,
+                            PlayerRemove_UUIDs => on_player_remove_uuids,
                             UpdateBlockEntity_VarInt => on_block_entity_update_varint,
                             UpdateBlockEntity_u8 => on_block_entity_update_u8,
                             UpdateBlockEntity_Data => on_block_entity_update_data,
@@ -1811,7 +1895,46 @@ impl Server {
                 .unwrap();
             model.set_skin(info.skin_url.clone());
         }
+        info!(
+            "MC-COMPAT-MILESTONE remote_player_spawn entity_id={} uuid={:?} name={} x={:.3} y={:.3} z={:.3}",
+            entity_id,
+            uuid,
+            self.players.get(&uuid).map_or("MISSING", |v| v.name.as_str()),
+            x,
+            y,
+            z
+        );
+        if !self.remote_player_entity_ids.contains(&entity_id) {
+            self.remote_player_entity_ids.push(entity_id);
+        }
         self.entity_map.insert(entity_id, entity);
+    }
+
+    fn on_update_health(&mut self, update: packet::play::clientbound::UpdateHealth) {
+        info!(
+            "MC-COMPAT-MILESTONE update_health health={:.1} food={} saturation={:.1}",
+            update.health, update.food.0, update.food_saturation
+        );
+        if self.combat_probe_enabled && update.health <= 0.0 {
+            info!(
+                "MC-COMPAT-MILESTONE combat_probe_death_observed health={:.1}",
+                update.health
+            );
+        }
+    }
+
+    fn on_death_message_varint(&mut self, death: packet::play::clientbound::DeathMessage_VarInt) {
+        info!(
+            "MC-COMPAT-MILESTONE combat_probe_death_message player_id={} message={}",
+            death.player_id.0, death.message
+        );
+    }
+
+    fn on_player_remove_uuids(&mut self, remove: packet::play::clientbound::PlayerRemove_UUIDs) {
+        info!(
+            "MC-COMPAT-MILESTONE player_remove uuids={}",
+            remove.uuids.data.len()
+        );
     }
 
     fn on_teleport_player_withdismount(

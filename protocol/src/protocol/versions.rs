@@ -276,6 +276,8 @@ mod tests {
             (0x2d, crate::protocol::packet::play::clientbound::internal_ids::EntityLook_VarInt),
             (0x2e, crate::protocol::packet::play::clientbound::internal_ids::VehicleTeleport),
             (0x34, crate::protocol::packet::play::clientbound::internal_ids::PlayerAbilities),
+            (0x38, crate::protocol::packet::play::clientbound::internal_ids::DeathMessage_VarInt),
+            (0x39, crate::protocol::packet::play::clientbound::internal_ids::PlayerRemove_UUIDs),
             (0x3a, crate::protocol::packet::play::clientbound::internal_ids::PlayerInfo_BitSet),
             (0x3c, crate::protocol::packet::play::clientbound::internal_ids::TeleportPlayer_WithConfirm),
             (0x42, crate::protocol::packet::play::clientbound::internal_ids::EntityHeadLook),
@@ -431,7 +433,7 @@ mod tests {
 
     #[test]
     fn protocol_763_no_longer_uses_758_fallback_for_remaining_observed_boundaries() {
-        for wire_id in [0x01, 0x02, 0x03, 0x04, 0x14, 0x1c, 0x1e, 0x1f, 0x24, 0x2b, 0x2c, 0x2d, 0x2e, 0x34, 0x3a, 0x42, 0x4d, 0x4e, 0x4f, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x5b, 0x67] {
+        for wire_id in [0x01, 0x02, 0x03, 0x04, 0x14, 0x1c, 0x1e, 0x1f, 0x24, 0x2b, 0x2c, 0x2d, 0x2e, 0x34, 0x38, 0x39, 0x3a, 0x42, 0x4d, 0x4e, 0x4f, 0x51, 0x52, 0x53, 0x54, 0x55, 0x56, 0x57, 0x58, 0x5b, 0x67] {
             assert_ne!(
                 translate_internal_packet_id_for_version(
                     763,
