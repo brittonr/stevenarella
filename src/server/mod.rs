@@ -77,6 +77,8 @@ pub struct Server {
     tick_timer: f64,
     entity_tick_timer: f64,
     pub received_chat_at: Option<Instant>,
+    logged_first_chunk: bool,
+    logged_render_tick_with_player: bool,
 
     sun_model: Option<sun::SunModel>,
     target_info: target::Info,
@@ -115,7 +117,12 @@ impl Server {
         forge_mods: Vec<forge::ForgeMod>,
         fml_network_version: Option<i64>,
     ) -> Result<Server, protocol::Error> {
+        info!(
+            "MC-COMPAT-MILESTONE connect_start protocol={} address={}",
+            protocol_version, address
+        );
         let mut conn = protocol::Conn::new(address, protocol_version)?;
+        info!("MC-COMPAT-MILESTONE tcp_connected");
 
         let tag = match fml_network_version {
             Some(1) => "\0FML\0",
@@ -132,16 +139,31 @@ impl Server {
             port,
             next: protocol::VarInt(2),
         })?;
+        info!("MC-COMPAT-MILESTONE handshake_sent next=login");
         conn.state = protocol::State::Login;
-        conn.write_packet(protocol::packet::login::serverbound::LoginStart {
-            username: profile.username.clone(),
-        })?;
+        if protocol_version >= 759 {
+            conn.write_packet(
+                protocol::packet::login::serverbound::LoginStart_WithOptionalUuid {
+                    username: profile.username.clone(),
+                    has_uuid: false,
+                },
+            )?;
+        } else {
+            conn.write_packet(protocol::packet::login::serverbound::LoginStart {
+                username: profile.username.clone(),
+            })?;
+        }
+        info!("MC-COMPAT-MILESTONE login_start_sent");
 
         use std::rc::Rc;
         let (server_id, public_key, verify_token);
         loop {
             match conn.read_packet()? {
                 protocol::packet::Packet::SetInitialCompression(val) => {
+                    info!(
+                        "MC-COMPAT-MILESTONE login_compression threshold={}",
+                        val.threshold.0
+                    );
                     conn.set_compresssion(val.threshold.0);
                 }
                 protocol::packet::Packet::EncryptionRequest(val) => {
@@ -158,6 +180,10 @@ impl Server {
                 }
                 protocol::packet::Packet::LoginSuccess_String(val) => {
                     warn!("Server is running in offline mode");
+                    info!(
+                        "MC-COMPAT-MILESTONE login_success state=play protocol={} username={}",
+                        protocol_version, val.username
+                    );
                     debug!("Login: {} {}", val.username, val.uuid);
                     let mut read = conn.clone();
                     let mut write = conn;
@@ -175,6 +201,33 @@ impl Server {
                 }
                 protocol::packet::Packet::LoginSuccess_UUID(val) => {
                     warn!("Server is running in offline mode");
+                    info!(
+                        "MC-COMPAT-MILESTONE login_success state=play protocol={} username={}",
+                        protocol_version, val.username
+                    );
+                    debug!("Login: {} {:?}", val.username, val.uuid);
+                    let mut read = conn.clone();
+                    let mut write = conn;
+                    read.state = protocol::State::Play;
+                    write.state = protocol::State::Play;
+                    let rx = Self::spawn_reader(read);
+                    return Ok(Server::new(
+                        protocol_version,
+                        forge_mods,
+                        val.uuid,
+                        resources,
+                        Arc::new(RwLock::new(Some(write))),
+                        Some(rx),
+                    ));
+                }
+                protocol::packet::Packet::LoginSuccess_UUID_WithProperties(val) => {
+                    warn!("Server is running in offline mode");
+                    info!(
+                        "MC-COMPAT-MILESTONE login_success state=play protocol={} username={} properties={}",
+                        protocol_version,
+                        val.username,
+                        val.properties.data.len()
+                    );
                     debug!("Login: {} {:?}", val.username, val.uuid);
                     let mut read = conn.clone();
                     let mut write = conn;
@@ -233,10 +286,18 @@ impl Server {
         loop {
             match read.read_packet()? {
                 protocol::packet::Packet::SetInitialCompression(val) => {
+                    info!(
+                        "MC-COMPAT-MILESTONE login_compression threshold={}",
+                        val.threshold.0
+                    );
                     read.set_compresssion(val.threshold.0);
                     write.set_compresssion(val.threshold.0);
                 }
                 protocol::packet::Packet::LoginSuccess_String(val) => {
+                    info!(
+                        "MC-COMPAT-MILESTONE login_success state=play protocol={} username={}",
+                        protocol_version, val.username
+                    );
                     debug!("Login: {} {}", val.username, val.uuid);
                     uuid = protocol::UUID::from_str(&val.uuid).unwrap();
                     read.state = protocol::State::Play;
@@ -244,6 +305,23 @@ impl Server {
                     break;
                 }
                 protocol::packet::Packet::LoginSuccess_UUID(val) => {
+                    info!(
+                        "MC-COMPAT-MILESTONE login_success state=play protocol={} username={}",
+                        protocol_version, val.username
+                    );
+                    debug!("Login: {} {:?}", val.username, val.uuid);
+                    uuid = val.uuid;
+                    read.state = protocol::State::Play;
+                    write.state = protocol::State::Play;
+                    break;
+                }
+                protocol::packet::Packet::LoginSuccess_UUID_WithProperties(val) => {
+                    info!(
+                        "MC-COMPAT-MILESTONE login_success state=play protocol={} username={} properties={}",
+                        protocol_version,
+                        val.username,
+                        val.properties.data.len()
+                    );
                     debug!("Login: {} {:?}", val.username, val.uuid);
                     uuid = val.uuid;
                     read.state = protocol::State::Play;
@@ -496,6 +574,8 @@ impl Server {
             tick_timer: 0.0,
             entity_tick_timer: 0.0,
             received_chat_at: None,
+            logged_first_chunk: false,
+            logged_render_tick_with_player: false,
             sun_model: None,
 
             target_info: target::Info::new(),
@@ -552,6 +632,10 @@ impl Server {
         self.world.tick(&mut self.entities);
 
         if self.player.is_some() {
+            if !self.logged_render_tick_with_player {
+                info!("MC-COMPAT-MILESTONE render_tick_with_player");
+                self.logged_render_tick_with_player = true;
+            }
             if let Some((pos, bl, _, _)) = target::trace_ray(
                 &self.world,
                 4.0,
@@ -1147,6 +1231,10 @@ impl Server {
 
         self.entity_map.insert(entity_id, player);
         self.player = Some(player);
+        info!(
+            "MC-COMPAT-MILESTONE join_game entity_id={} gamemode={:?}",
+            entity_id, gamemode
+        );
 
         // Let the server know who we are
         let brand = plugin_messages::Brand {
@@ -1992,6 +2080,13 @@ impl Server {
         &mut self,
         chunk_data: packet::play::clientbound::ChunkData_AndLight,
     ) {
+        if !self.logged_first_chunk {
+            info!(
+                "MC-COMPAT-MILESTONE first_chunk_data chunk_x={} chunk_z={}",
+                chunk_data.chunk_x, chunk_data.chunk_z
+            );
+            self.logged_first_chunk = true;
+        }
         self.world
             .load_chunk118(
                 chunk_data.chunk_x,

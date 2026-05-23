@@ -26,7 +26,49 @@ const PLAY_CLIENTBOUND_OVERRIDES: &[(i32, i32)] = &[
     (0x6e, packet::play::clientbound::internal_ids::Tags_Nested),
 ];
 
+const LOGIN_SERVERBOUND_OVERRIDES: &[(i32, i32)] = &[(
+    0x00,
+    packet::login::serverbound::internal_ids::LoginStart_WithOptionalUuid,
+)];
+
+const LOGIN_CLIENTBOUND_OVERRIDES: &[(i32, i32)] = &[(
+    0x02,
+    packet::login::clientbound::internal_ids::LoginSuccess_UUID_WithProperties,
+)];
+
 pub fn translate_internal_packet_id(state: State, dir: Direction, id: i32, to_internal: bool) -> i32 {
+    if state == State::Login && dir == Direction::Clientbound {
+        if to_internal {
+            if let Some((_, internal_id)) = LOGIN_CLIENTBOUND_OVERRIDES
+                .iter()
+                .find(|(wire_id, _)| *wire_id == id)
+            {
+                return *internal_id;
+            }
+        } else if let Some((wire_id, _)) = LOGIN_CLIENTBOUND_OVERRIDES
+            .iter()
+            .find(|(_, internal_id)| *internal_id == id)
+        {
+            return *wire_id;
+        }
+    }
+
+    if state == State::Login && dir == Direction::Serverbound {
+        if to_internal {
+            if let Some((_, internal_id)) = LOGIN_SERVERBOUND_OVERRIDES
+                .iter()
+                .find(|(wire_id, _)| *wire_id == id)
+            {
+                return *internal_id;
+            }
+        } else if let Some((wire_id, _)) = LOGIN_SERVERBOUND_OVERRIDES
+            .iter()
+            .find(|(_, internal_id)| *internal_id == id)
+        {
+            return *wire_id;
+        }
+    }
+
     if state == State::Play && dir == Direction::Clientbound {
         if to_internal {
             if let Some((_, internal_id)) = PLAY_CLIENTBOUND_OVERRIDES

@@ -2365,6 +2365,13 @@ state_packets!(
             packet LoginStart {
                 field username: String =,
             }
+            /// Protocol 1.19+ login start includes an optional profile UUID
+            /// after the username. Stevenarella only needs to advertise that
+            /// no UUID is supplied for offline-mode compatibility probes.
+            packet LoginStart_WithOptionalUuid {
+                field username: String =,
+                field has_uuid: bool =,
+            }
             /// EncryptionResponse is sent as a reply to EncryptionRequest. All
             /// packets following this one must be encrypted with AES/CFB8
             /// encryption.
@@ -2422,6 +2429,11 @@ state_packets!(
             packet LoginSuccess_UUID {
                 field uuid: UUID =,
                 field username: String =,
+            }
+            packet LoginSuccess_UUID_WithProperties {
+                field uuid: UUID =,
+                field username: String =,
+                field properties: LenPrefixed<VarInt, packet::PlayerProperty> =,
             }
             /// SetInitialCompression sets the compression threshold during the
             /// login state.
@@ -3051,11 +3063,38 @@ pub enum PlayerDetail {
     },
 }
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct PlayerProperty {
     pub name: String,
     pub value: String,
     pub signature: Option<String>,
+}
+
+impl Serializable for PlayerProperty {
+    fn read_from<R: io::Read>(buf: &mut R) -> Result<Self, Error> {
+        let name = String::read_from(buf)?;
+        let value = String::read_from(buf)?;
+        let signature = if bool::read_from(buf)? {
+            Some(String::read_from(buf)?)
+        } else {
+            None
+        };
+        Ok(PlayerProperty {
+            name,
+            value,
+            signature,
+        })
+    }
+
+    fn write_to<W: io::Write>(&self, buf: &mut W) -> Result<(), Error> {
+        self.name.write_to(buf)?;
+        self.value.write_to(buf)?;
+        self.signature.is_some().write_to(buf)?;
+        if let Some(signature) = &self.signature {
+            signature.write_to(buf)?;
+        }
+        Ok(())
+    }
 }
 
 use crate::item;

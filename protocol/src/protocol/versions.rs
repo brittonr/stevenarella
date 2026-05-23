@@ -137,6 +137,50 @@ mod tests {
     }
 
     #[test]
+    fn protocol_763_uses_optional_uuid_login_start() {
+        assert_eq!(
+            translate_internal_packet_id_for_version(763, State::Login, Direction::Serverbound, 0x00, true),
+            crate::protocol::packet::login::serverbound::internal_ids::LoginStart_WithOptionalUuid,
+        );
+        assert_eq!(
+            translate_internal_packet_id_for_version(
+                763,
+                State::Login,
+                Direction::Serverbound,
+                crate::protocol::packet::login::serverbound::internal_ids::LoginStart_WithOptionalUuid,
+                false,
+            ),
+            0x00,
+        );
+        assert_ne!(
+            translate_internal_packet_id_for_version(763, State::Login, Direction::Serverbound, 0x00, true),
+            translate_internal_packet_id_for_version(758, State::Login, Direction::Serverbound, 0x00, true),
+        );
+    }
+
+    #[test]
+    fn protocol_763_uses_login_success_properties() {
+        assert_eq!(
+            translate_internal_packet_id_for_version(763, State::Login, Direction::Clientbound, 0x02, true),
+            crate::protocol::packet::login::clientbound::internal_ids::LoginSuccess_UUID_WithProperties,
+        );
+        assert_eq!(
+            translate_internal_packet_id_for_version(
+                763,
+                State::Login,
+                Direction::Clientbound,
+                crate::protocol::packet::login::clientbound::internal_ids::LoginSuccess_UUID_WithProperties,
+                false,
+            ),
+            0x02,
+        );
+        assert_ne!(
+            translate_internal_packet_id_for_version(763, State::Login, Direction::Clientbound, 0x02, true),
+            translate_internal_packet_id_for_version(758, State::Login, Direction::Clientbound, 0x02, true),
+        );
+    }
+
+    #[test]
     fn protocol_763_maps_valence_game_join_boundary() {
         assert_eq!(
             translate_internal_packet_id_for_version(763, State::Play, Direction::Clientbound, 0x28, true),
