@@ -894,6 +894,47 @@ impl Server {
         }
 
         if self.flag_probe_enabled && self.active_probe_ticks >= FLAG_PROBE_FIRST_TICK {
+            let flag_team = std::env::var("MC_COMPAT_FLAG_PROBE_TEAM")
+                .unwrap_or_else(|_| "red".to_string())
+                .to_ascii_lowercase();
+            let (
+                target_flag_name,
+                flag_x,
+                flag_z,
+                dig_location,
+                dig_location_label,
+                capture_team_name,
+                capture_x,
+                capture_z,
+                pickup_yaw,
+                capture_yaw,
+            ) = if flag_team == "blue" {
+                (
+                    "red",
+                    -48.0,
+                    0.0,
+                    Position::new(-46, 67, 0),
+                    "-46,67,0",
+                    "blue",
+                    48.0,
+                    0.0,
+                    -90.0,
+                    90.0,
+                )
+            } else {
+                (
+                    "blue",
+                    48.0,
+                    0.0,
+                    Position::new(46, 67, 0),
+                    "46,67,0",
+                    "red",
+                    -48.0,
+                    0.0,
+                    90.0,
+                    -90.0,
+                )
+            };
             let elapsed = self.active_probe_ticks - FLAG_PROBE_FIRST_TICK;
             let cycle = (elapsed / FLAG_PROBE_CYCLE_TICKS) + 1;
             if cycle <= self.flag_probe_repeat_target {
@@ -901,64 +942,70 @@ impl Server {
                 let sequence = protocol::VarInt(cycle as i32);
                 match cycle_tick {
                     0 => {
-                        info!("MC-COMPAT-MILESTONE flag_probe_move_to_blue_flag x=48.0 y=65.0 z=0.0 cycle={}", cycle);
+                        info!(
+                            "MC-COMPAT-MILESTONE flag_probe_move_to_{}_flag x={:.1} y=65.0 z={:.1} cycle={}",
+                            target_flag_name, flag_x, flag_z, cycle
+                        );
                         if let Some(position) =
                             self.entities.get_component_mut(player, self.position)
                         {
-                            position.position = cgmath::Vector3::new(48.0, 65.0, 0.0);
+                            position.position = cgmath::Vector3::new(flag_x, 65.0, flag_z);
                             position.moved = true;
                         }
                         self.write_packet(packet::play::serverbound::PlayerPositionLook {
-                            x: 48.0,
+                            x: flag_x,
                             y: 65.0,
-                            z: 0.0,
-                            yaw: 90.0,
+                            z: flag_z,
+                            yaw: pickup_yaw,
                             pitch: 0.0,
                             on_ground: true,
                         });
                     }
                     1..=30 => {
                         self.write_packet(packet::play::serverbound::PlayerPosition {
-                            x: 48.0,
+                            x: flag_x,
                             y: 65.0,
-                            z: 0.0,
+                            z: flag_z,
                             on_ground: true,
                         });
                     }
                     40 => {
-                        info!("MC-COMPAT-MILESTONE flag_probe_dig_blue_flag_sent status=stop_destroy location=46,67,0 sequence={} cycle={}", cycle, cycle);
+                        info!(
+                            "MC-COMPAT-MILESTONE flag_probe_dig_{}_flag_sent status=stop_destroy location={} sequence={} cycle={}",
+                            target_flag_name, dig_location_label, cycle, cycle
+                        );
                         self.write_packet(packet::play::serverbound::PlayerDigging_WithSequence {
                             status: protocol::VarInt(2),
-                            location: Position::new(46, 67, 0),
+                            location: dig_location,
                             face: protocol::VarInt(1),
                             sequence,
                         });
                     }
                     100 => {
                         info!(
-                            "MC-COMPAT-MILESTONE flag_probe_move_to_red_capture x=-48.0 y=65.0 z=0.0 cycle={}"
-                            , cycle
+                            "MC-COMPAT-MILESTONE flag_probe_move_to_{}_capture x={:.1} y=65.0 z={:.1} cycle={}",
+                            capture_team_name, capture_x, capture_z, cycle
                         );
                         if let Some(position) =
                             self.entities.get_component_mut(player, self.position)
                         {
-                            position.position = cgmath::Vector3::new(-48.0, 65.0, 0.0);
+                            position.position = cgmath::Vector3::new(capture_x, 65.0, capture_z);
                             position.moved = true;
                         }
                         self.write_packet(packet::play::serverbound::PlayerPositionLook {
-                            x: -48.0,
+                            x: capture_x,
                             y: 65.0,
-                            z: 0.0,
-                            yaw: -90.0,
+                            z: capture_z,
+                            yaw: capture_yaw,
                             pitch: 0.0,
                             on_ground: true,
                         });
                     }
                     101..=200 => {
                         self.write_packet(packet::play::serverbound::PlayerPosition {
-                            x: -48.0,
+                            x: capture_x,
                             y: 65.0,
-                            z: 0.0,
+                            z: capture_z,
                             on_ground: true,
                         });
                     }
