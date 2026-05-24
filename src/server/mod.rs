@@ -85,6 +85,7 @@ pub struct Server {
     combat_probe_enabled: bool,
     respawn_probe_enabled: bool,
     inventory_probe_enabled: bool,
+    flag_probe_enabled: bool,
     active_probe_ticks: u32,
     active_probe_logged_position_look_sent: bool,
     combat_probe_attacks_sent: u32,
@@ -95,6 +96,9 @@ pub struct Server {
     inventory_probe_sword_seen: bool,
     inventory_probe_wool_seen: bool,
     inventory_probe_hotbar_seen: bool,
+    flag_probe_have_flag_seen: bool,
+    flag_probe_capture_seen: bool,
+    flag_probe_score_seen: bool,
     remote_player_entity_ids: Vec<i32>,
 
     sun_model: Option<sun::SunModel>,
@@ -608,6 +612,9 @@ impl Server {
             inventory_probe_enabled: std::env::var("MC_COMPAT_INVENTORY_PROBE")
                 .map(|value| value != "0")
                 .unwrap_or(false),
+            flag_probe_enabled: std::env::var("MC_COMPAT_FLAG_PROBE")
+                .map(|value| value != "0")
+                .unwrap_or(false),
             active_probe_ticks: 0,
             active_probe_logged_position_look_sent: false,
             combat_probe_attacks_sent: 0,
@@ -618,6 +625,9 @@ impl Server {
             inventory_probe_sword_seen: false,
             inventory_probe_wool_seen: false,
             inventory_probe_hotbar_seen: false,
+            flag_probe_have_flag_seen: false,
+            flag_probe_capture_seen: false,
+            flag_probe_score_seen: false,
             remote_player_entity_ids: Vec::new(),
             sun_model: None,
 
@@ -702,6 +712,7 @@ impl Server {
             && !self.combat_probe_enabled
             && !self.respawn_probe_enabled
             && !self.inventory_probe_enabled
+            && !self.flag_probe_enabled
         {
             return;
         }
@@ -854,6 +865,69 @@ impl Server {
                         );
                     }
                 }
+            }
+        }
+
+        if self.flag_probe_enabled {
+            match self.active_probe_ticks {
+                560 => {
+                    info!("MC-COMPAT-MILESTONE flag_probe_move_to_blue_flag x=48.0 y=65.0 z=0.0");
+                    if let Some(position) = self.entities.get_component_mut(player, self.position) {
+                        position.position = cgmath::Vector3::new(48.0, 65.0, 0.0);
+                        position.moved = true;
+                    }
+                    self.write_packet(packet::play::serverbound::PlayerPositionLook {
+                        x: 48.0,
+                        y: 65.0,
+                        z: 0.0,
+                        yaw: 90.0,
+                        pitch: 0.0,
+                        on_ground: true,
+                    });
+                }
+                561..=590 => {
+                    self.write_packet(packet::play::serverbound::PlayerPosition {
+                        x: 48.0,
+                        y: 65.0,
+                        z: 0.0,
+                        on_ground: true,
+                    });
+                }
+                600 => {
+                    info!("MC-COMPAT-MILESTONE flag_probe_dig_blue_flag_sent status=stop_destroy location=46,67,0 sequence=1");
+                    self.write_packet(packet::play::serverbound::PlayerDigging_WithSequence {
+                        status: protocol::VarInt(2),
+                        location: Position::new(46, 67, 0),
+                        face: protocol::VarInt(1),
+                        sequence: protocol::VarInt(1),
+                    });
+                }
+                660 => {
+                    info!(
+                        "MC-COMPAT-MILESTONE flag_probe_move_to_red_capture x=-48.0 y=65.0 z=0.0"
+                    );
+                    if let Some(position) = self.entities.get_component_mut(player, self.position) {
+                        position.position = cgmath::Vector3::new(-48.0, 65.0, 0.0);
+                        position.moved = true;
+                    }
+                    self.write_packet(packet::play::serverbound::PlayerPositionLook {
+                        x: -48.0,
+                        y: 65.0,
+                        z: 0.0,
+                        yaw: -90.0,
+                        pitch: 0.0,
+                        on_ground: true,
+                    });
+                }
+                661..=760 => {
+                    self.write_packet(packet::play::serverbound::PlayerPosition {
+                        x: -48.0,
+                        y: 65.0,
+                        z: 0.0,
+                        on_ground: true,
+                    });
+                }
+                _ => {}
             }
         }
     }
@@ -2491,7 +2565,29 @@ impl Server {
         _position: Option<u8>,
         _sender: Option<protocol::UUID>,
     ) {
-        info!("Received chat message: {}", message);
+        let rendered = message.to_string();
+        info!("Received chat message: {}", rendered);
+        if self.flag_probe_enabled {
+            if !self.flag_probe_have_flag_seen && rendered.contains("You have the flag") {
+                self.flag_probe_have_flag_seen = true;
+                info!("MC-COMPAT-MILESTONE flag_probe_have_flag_chat");
+            }
+            if !self.flag_probe_capture_seen && rendered.contains("You captured the flag") {
+                self.flag_probe_capture_seen = true;
+                info!("MC-COMPAT-MILESTONE flag_probe_capture_chat");
+            }
+            if !self.flag_probe_score_seen
+                && rendered.contains("RED")
+                && rendered.contains('1')
+                && rendered.contains("BLUE")
+            {
+                self.flag_probe_score_seen = true;
+                info!(
+                    "MC-COMPAT-MILESTONE flag_probe_score_chat message={}",
+                    rendered
+                );
+            }
+        }
         self.received_chat_at = Some(Instant::now());
     }
 

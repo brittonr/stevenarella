@@ -333,6 +333,12 @@ state_packets!(
                 field location: Position =,
                 field face: u8 =,
             }
+            packet PlayerDigging_WithSequence {
+                field status: VarInt =,
+                field location: Position =,
+                field face: VarInt =,
+                field sequence: VarInt =,
+            }
             packet PlayerDigging_u8 {
                 field status: u8 =,
                 field location: Position =,
@@ -2416,6 +2422,9 @@ state_packets!(
                 field block: VarInt =,
                 field status: VarInt =,
                 field successful: bool =,
+            }
+            packet PlayerActionResponse_Sequence {
+                field sequence: VarInt =,
             }
             packet UpdateLight_Arrays {
                 field chunk_x: VarInt =,

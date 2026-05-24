@@ -5,6 +5,7 @@ const PLAY_CLIENTBOUND_OVERRIDES: &[(i32, i32)] = &[
     (0x02, packet::play::clientbound::internal_ids::SpawnExperienceOrb),
     (0x03, packet::play::clientbound::internal_ids::SpawnPlayer_f64_NoMeta),
     (0x04, packet::play::clientbound::internal_ids::Animation),
+    (0x06, packet::play::clientbound::internal_ids::PlayerActionResponse_Sequence),
     (0x10, packet::play::clientbound::internal_ids::DeclareCommands),
     (0x12, packet::play::clientbound::internal_ids::WindowItems_StateCarry),
     (0x14, packet::play::clientbound::internal_ids::WindowSetSlot_State),
@@ -61,6 +62,10 @@ const PLAY_SERVERBOUND_OVERRIDES: &[(i32, i32)] = &[
     (0x12, packet::play::serverbound::internal_ids::KeepAliveServerbound_i64),
     (0x14, packet::play::serverbound::internal_ids::PlayerPosition),
     (0x15, packet::play::serverbound::internal_ids::PlayerPositionLook),
+    (
+        0x1d,
+        packet::play::serverbound::internal_ids::PlayerDigging_WithSequence,
+    ),
     (0x28, packet::play::serverbound::internal_ids::HeldItemChange),
     (
         0x31,
