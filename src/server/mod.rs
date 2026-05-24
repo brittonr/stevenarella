@@ -40,6 +40,23 @@ pub mod plugin_messages;
 mod sun;
 pub mod target;
 
+const DEFAULT_FLAG_PROBE_REPEAT_TARGET: u32 = 1;
+const MAX_FLAG_PROBE_REPEAT_TARGET: u32 = 8;
+const FLAG_PROBE_FIRST_TICK: u32 = 560;
+const FLAG_PROBE_CYCLE_TICKS: u32 = 220;
+
+fn parse_flag_probe_repeat_target(value: Option<&str>) -> u32 {
+    value
+        .and_then(|raw| raw.trim().parse::<u32>().ok())
+        .filter(|target| *target > 0)
+        .map(|target| target.min(MAX_FLAG_PROBE_REPEAT_TARGET))
+        .unwrap_or(DEFAULT_FLAG_PROBE_REPEAT_TARGET)
+}
+
+fn flag_probe_repeat_target_from_env() -> u32 {
+    parse_flag_probe_repeat_target(std::env::var("MC_COMPAT_FLAG_PROBE_REPEAT").ok().as_deref())
+}
+
 pub struct Server {
     uuid: protocol::UUID,
     conn: Arc<RwLock<Option<protocol::Conn>>>,
@@ -99,6 +116,10 @@ pub struct Server {
     flag_probe_have_flag_seen: bool,
     flag_probe_capture_seen: bool,
     flag_probe_score_seen: bool,
+    flag_probe_repeat_target: u32,
+    flag_probe_have_flag_count: u32,
+    flag_probe_capture_count: u32,
+    flag_probe_score_count: u32,
     remote_player_entity_ids: Vec<i32>,
 
     sun_model: Option<sun::SunModel>,
@@ -628,6 +649,10 @@ impl Server {
             flag_probe_have_flag_seen: false,
             flag_probe_capture_seen: false,
             flag_probe_score_seen: false,
+            flag_probe_repeat_target: flag_probe_repeat_target_from_env(),
+            flag_probe_have_flag_count: 0,
+            flag_probe_capture_count: 0,
+            flag_probe_score_count: 0,
             remote_player_entity_ids: Vec::new(),
             sun_model: None,
 
@@ -868,66 +893,77 @@ impl Server {
             }
         }
 
-        if self.flag_probe_enabled {
-            match self.active_probe_ticks {
-                560 => {
-                    info!("MC-COMPAT-MILESTONE flag_probe_move_to_blue_flag x=48.0 y=65.0 z=0.0");
-                    if let Some(position) = self.entities.get_component_mut(player, self.position) {
-                        position.position = cgmath::Vector3::new(48.0, 65.0, 0.0);
-                        position.moved = true;
+        if self.flag_probe_enabled && self.active_probe_ticks >= FLAG_PROBE_FIRST_TICK {
+            let elapsed = self.active_probe_ticks - FLAG_PROBE_FIRST_TICK;
+            let cycle = (elapsed / FLAG_PROBE_CYCLE_TICKS) + 1;
+            if cycle <= self.flag_probe_repeat_target {
+                let cycle_tick = elapsed % FLAG_PROBE_CYCLE_TICKS;
+                let sequence = protocol::VarInt(cycle as i32);
+                match cycle_tick {
+                    0 => {
+                        info!("MC-COMPAT-MILESTONE flag_probe_move_to_blue_flag x=48.0 y=65.0 z=0.0 cycle={}", cycle);
+                        if let Some(position) =
+                            self.entities.get_component_mut(player, self.position)
+                        {
+                            position.position = cgmath::Vector3::new(48.0, 65.0, 0.0);
+                            position.moved = true;
+                        }
+                        self.write_packet(packet::play::serverbound::PlayerPositionLook {
+                            x: 48.0,
+                            y: 65.0,
+                            z: 0.0,
+                            yaw: 90.0,
+                            pitch: 0.0,
+                            on_ground: true,
+                        });
                     }
-                    self.write_packet(packet::play::serverbound::PlayerPositionLook {
-                        x: 48.0,
-                        y: 65.0,
-                        z: 0.0,
-                        yaw: 90.0,
-                        pitch: 0.0,
-                        on_ground: true,
-                    });
-                }
-                561..=590 => {
-                    self.write_packet(packet::play::serverbound::PlayerPosition {
-                        x: 48.0,
-                        y: 65.0,
-                        z: 0.0,
-                        on_ground: true,
-                    });
-                }
-                600 => {
-                    info!("MC-COMPAT-MILESTONE flag_probe_dig_blue_flag_sent status=stop_destroy location=46,67,0 sequence=1");
-                    self.write_packet(packet::play::serverbound::PlayerDigging_WithSequence {
-                        status: protocol::VarInt(2),
-                        location: Position::new(46, 67, 0),
-                        face: protocol::VarInt(1),
-                        sequence: protocol::VarInt(1),
-                    });
-                }
-                660 => {
-                    info!(
-                        "MC-COMPAT-MILESTONE flag_probe_move_to_red_capture x=-48.0 y=65.0 z=0.0"
-                    );
-                    if let Some(position) = self.entities.get_component_mut(player, self.position) {
-                        position.position = cgmath::Vector3::new(-48.0, 65.0, 0.0);
-                        position.moved = true;
+                    1..=30 => {
+                        self.write_packet(packet::play::serverbound::PlayerPosition {
+                            x: 48.0,
+                            y: 65.0,
+                            z: 0.0,
+                            on_ground: true,
+                        });
                     }
-                    self.write_packet(packet::play::serverbound::PlayerPositionLook {
-                        x: -48.0,
-                        y: 65.0,
-                        z: 0.0,
-                        yaw: -90.0,
-                        pitch: 0.0,
-                        on_ground: true,
-                    });
+                    40 => {
+                        info!("MC-COMPAT-MILESTONE flag_probe_dig_blue_flag_sent status=stop_destroy location=46,67,0 sequence={} cycle={}", cycle, cycle);
+                        self.write_packet(packet::play::serverbound::PlayerDigging_WithSequence {
+                            status: protocol::VarInt(2),
+                            location: Position::new(46, 67, 0),
+                            face: protocol::VarInt(1),
+                            sequence,
+                        });
+                    }
+                    100 => {
+                        info!(
+                            "MC-COMPAT-MILESTONE flag_probe_move_to_red_capture x=-48.0 y=65.0 z=0.0 cycle={}"
+                            , cycle
+                        );
+                        if let Some(position) =
+                            self.entities.get_component_mut(player, self.position)
+                        {
+                            position.position = cgmath::Vector3::new(-48.0, 65.0, 0.0);
+                            position.moved = true;
+                        }
+                        self.write_packet(packet::play::serverbound::PlayerPositionLook {
+                            x: -48.0,
+                            y: 65.0,
+                            z: 0.0,
+                            yaw: -90.0,
+                            pitch: 0.0,
+                            on_ground: true,
+                        });
+                    }
+                    101..=200 => {
+                        self.write_packet(packet::play::serverbound::PlayerPosition {
+                            x: -48.0,
+                            y: 65.0,
+                            z: 0.0,
+                            on_ground: true,
+                        });
+                    }
+                    _ => {}
                 }
-                661..=760 => {
-                    self.write_packet(packet::play::serverbound::PlayerPosition {
-                        x: -48.0,
-                        y: 65.0,
-                        z: 0.0,
-                        on_ground: true,
-                    });
-                }
-                _ => {}
             }
         }
     }
@@ -2568,24 +2604,44 @@ impl Server {
         let rendered = message.to_string();
         info!("Received chat message: {}", rendered);
         if self.flag_probe_enabled {
-            if !self.flag_probe_have_flag_seen && rendered.contains("You have the flag") {
-                self.flag_probe_have_flag_seen = true;
-                info!("MC-COMPAT-MILESTONE flag_probe_have_flag_chat");
-            }
-            if !self.flag_probe_capture_seen && rendered.contains("You captured the flag") {
-                self.flag_probe_capture_seen = true;
-                info!("MC-COMPAT-MILESTONE flag_probe_capture_chat");
-            }
-            if !self.flag_probe_score_seen
-                && rendered.contains("RED")
-                && rendered.contains('1')
-                && rendered.contains("BLUE")
-            {
-                self.flag_probe_score_seen = true;
+            if rendered.contains("You have the flag") {
+                self.flag_probe_have_flag_count = self.flag_probe_have_flag_count.saturating_add(1);
+                if !self.flag_probe_have_flag_seen {
+                    self.flag_probe_have_flag_seen = true;
+                }
                 info!(
-                    "MC-COMPAT-MILESTONE flag_probe_score_chat message={}",
-                    rendered
+                    "MC-COMPAT-MILESTONE flag_probe_have_flag_chat count={} target={}",
+                    self.flag_probe_have_flag_count, self.flag_probe_repeat_target
                 );
+            }
+            if rendered.contains("You captured the flag") {
+                self.flag_probe_capture_count = self.flag_probe_capture_count.saturating_add(1);
+                if !self.flag_probe_capture_seen {
+                    self.flag_probe_capture_seen = true;
+                }
+                info!(
+                    "MC-COMPAT-MILESTONE flag_probe_capture_chat count={} target={}",
+                    self.flag_probe_capture_count, self.flag_probe_repeat_target
+                );
+            }
+            if rendered.contains("RED") && rendered.contains("BLUE") {
+                let expected_score = self.flag_probe_score_count.saturating_add(1).to_string();
+                if rendered.contains(&expected_score) {
+                    self.flag_probe_score_count = self.flag_probe_score_count.saturating_add(1);
+                    if !self.flag_probe_score_seen {
+                        self.flag_probe_score_seen = true;
+                    }
+                    info!(
+                        "MC-COMPAT-MILESTONE flag_probe_score_chat count={} target={} message={}",
+                        self.flag_probe_score_count, self.flag_probe_repeat_target, rendered
+                    );
+                    if self.flag_probe_score_count >= self.flag_probe_repeat_target {
+                        info!(
+                            "MC-COMPAT-MILESTONE flag_probe_repeat_target_reached count={} target={}",
+                            self.flag_probe_score_count, self.flag_probe_repeat_target
+                        );
+                    }
+                }
             }
         }
         self.received_chat_at = Some(Instant::now());
@@ -3039,5 +3095,47 @@ fn calculate_relative_teleport(flag: TeleportFlag, flags: u8, base: f64, val: f6
         val
     } else {
         base + val
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        parse_flag_probe_repeat_target, DEFAULT_FLAG_PROBE_REPEAT_TARGET,
+        MAX_FLAG_PROBE_REPEAT_TARGET,
+    };
+
+    #[test]
+    fn flag_probe_repeat_target_defaults_when_unset_or_invalid() {
+        assert_eq!(
+            parse_flag_probe_repeat_target(None),
+            DEFAULT_FLAG_PROBE_REPEAT_TARGET
+        );
+        assert_eq!(
+            parse_flag_probe_repeat_target(Some("")),
+            DEFAULT_FLAG_PROBE_REPEAT_TARGET
+        );
+        assert_eq!(
+            parse_flag_probe_repeat_target(Some("0")),
+            DEFAULT_FLAG_PROBE_REPEAT_TARGET
+        );
+        assert_eq!(
+            parse_flag_probe_repeat_target(Some("not-a-number")),
+            DEFAULT_FLAG_PROBE_REPEAT_TARGET
+        );
+    }
+
+    #[test]
+    fn flag_probe_repeat_target_accepts_positive_counts() {
+        assert_eq!(parse_flag_probe_repeat_target(Some("2")), 2);
+        assert_eq!(parse_flag_probe_repeat_target(Some(" 3 ")), 3);
+    }
+
+    #[test]
+    fn flag_probe_repeat_target_is_capped() {
+        assert_eq!(
+            parse_flag_probe_repeat_target(Some("999")),
+            MAX_FLAG_PROBE_REPEAT_TARGET
+        );
     }
 }
