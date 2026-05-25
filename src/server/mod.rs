@@ -113,6 +113,7 @@ pub struct Server {
     inventory_probe_sword_seen: bool,
     inventory_probe_wool_seen: bool,
     inventory_probe_hotbar_seen: bool,
+    inventory_probe_drop_sent: bool,
     flag_probe_have_flag_seen: bool,
     flag_probe_capture_seen: bool,
     flag_probe_score_seen: bool,
@@ -646,6 +647,7 @@ impl Server {
             inventory_probe_sword_seen: false,
             inventory_probe_wool_seen: false,
             inventory_probe_hotbar_seen: false,
+            inventory_probe_drop_sent: false,
             flag_probe_have_flag_seen: false,
             flag_probe_capture_seen: false,
             flag_probe_score_seen: false,
@@ -891,6 +893,26 @@ impl Server {
                     }
                 }
             }
+        }
+
+        if self.inventory_probe_enabled && self.active_probe_ticks == 520 {
+            info!("MC-COMPAT-MILESTONE inventory_probe_select_hotbar_slot slot=0");
+            self.write_packet(packet::play::serverbound::HeldItemChange { slot: 0 });
+        }
+
+        if self.inventory_probe_enabled
+            && self.active_probe_ticks >= 560
+            && self.inventory_probe_sword_seen
+            && !self.inventory_probe_drop_sent
+        {
+            info!("MC-COMPAT-MILESTONE inventory_probe_drop_item_sent status=drop_item slot=36 sequence=77");
+            self.write_packet(packet::play::serverbound::PlayerDigging_WithSequence {
+                status: protocol::VarInt(4),
+                location: Position::new(0, 0, 0),
+                face: protocol::VarInt(0),
+                sequence: protocol::VarInt(77),
+            });
+            self.inventory_probe_drop_sent = true;
         }
 
         if self.flag_probe_enabled && self.active_probe_ticks >= FLAG_PROBE_FIRST_TICK {
