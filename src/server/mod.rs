@@ -876,7 +876,7 @@ impl Server {
                             on_ground: true,
                         });
                     }
-                    621..=700 => {
+                    621..=980 => {
                         self.write_packet(packet::play::serverbound::PlayerPosition {
                             x: 38.0,
                             y: 65.0,
@@ -887,7 +887,7 @@ impl Server {
                     _ => {}
                 }
 
-                if self.active_probe_ticks >= 720
+                if self.active_probe_ticks >= 900
                     && self.combat_probe_attacks_sent < 10
                     && self.active_probe_ticks % 20 == 0
                 {
