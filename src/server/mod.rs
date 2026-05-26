@@ -117,6 +117,10 @@ pub struct Server {
     inventory_probe_pickup_seen: bool,
     inventory_probe_block_place_sent: bool,
     inventory_probe_click_sent: bool,
+    inventory_probe_container_click_sent: bool,
+    inventory_probe_container_id: u8,
+    inventory_probe_container_state_id: i32,
+    inventory_probe_container_seen: bool,
     inventory_probe_state_id: i32,
     flag_probe_have_flag_seen: bool,
     flag_probe_capture_seen: bool,
@@ -655,6 +659,10 @@ impl Server {
             inventory_probe_pickup_seen: false,
             inventory_probe_block_place_sent: false,
             inventory_probe_click_sent: false,
+            inventory_probe_container_click_sent: false,
+            inventory_probe_container_id: 0,
+            inventory_probe_container_state_id: 0,
+            inventory_probe_container_seen: false,
             inventory_probe_state_id: 0,
             flag_probe_have_flag_seen: false,
             flag_probe_capture_seen: false,
@@ -977,6 +985,38 @@ impl Server {
             self.inventory_probe_click_sent = true;
         }
 
+        if self.inventory_probe_enabled
+            && self.active_probe_ticks >= 740
+            && self.inventory_probe_click_sent
+            && self.inventory_probe_container_seen
+            && self.inventory_probe_container_state_id > 0
+            && !self.inventory_probe_container_click_sent
+        {
+            info!(
+                "MC-COMPAT-MILESTONE inventory_probe_container_click_sent window={} slot=0 state_id={} \
+                 button=0 mode=click carried_item=empty slot_item=RedWool count=63",
+                self.inventory_probe_container_id, self.inventory_probe_container_state_id
+            );
+            self.write_packet(packet::play::serverbound::ClickWindow_StateBeforeSlot {
+                id: self.inventory_probe_container_id,
+                slot: 0,
+                state: protocol::VarInt(self.inventory_probe_container_state_id),
+                button: 0,
+                mode: protocol::VarInt(0),
+                slots: protocol::LenPrefixed::new(vec![packet::NumberedSlot {
+                    slot_number: 0,
+                    slot_data: Some(item::Stack {
+                        id: 194,
+                        count: 63,
+                        damage: None,
+                        tag: None,
+                    }),
+                }]),
+                clicked_item: None,
+            });
+            self.inventory_probe_container_click_sent = true;
+        }
+
         if self.flag_probe_enabled && self.active_probe_ticks >= FLAG_PROBE_FIRST_TICK {
             let flag_team = std::env::var("MC_COMPAT_FLAG_PROBE_TEAM")
                 .unwrap_or_else(|_| "red".to_string())
@@ -1158,6 +1198,7 @@ impl Server {
                             TimeUpdate => on_time_update,
                             ChangeGameState => on_game_state_change,
                             UpdateHealth => on_update_health,
+                            WindowOpen_VarInt => on_window_open_varint,
                             WindowItems_StateCarry => on_window_items_state_carry,
                             WindowSetSlot_State => on_window_set_slot_state,
                             CollectItem => on_collect_item,
@@ -2244,6 +2285,21 @@ impl Server {
         }
     }
 
+    fn on_window_open_varint(&mut self, window: packet::play::clientbound::WindowOpen_VarInt) {
+        if !self.inventory_probe_enabled {
+            return;
+        }
+
+        info!(
+            "MC-COMPAT-MILESTONE inventory_probe_open_container window={} type={} title={}",
+            window.id.0, window.ty.0, window.title
+        );
+        if window.id.0 > 0 {
+            self.inventory_probe_container_id = window.id.0 as u8;
+            self.inventory_probe_container_seen = true;
+        }
+    }
+
     fn on_window_items_state_carry(
         &mut self,
         window: packet::play::clientbound::WindowItems_StateCarry,
@@ -2276,6 +2332,14 @@ impl Server {
             Self::item_summary(&window.carried_item),
         );
         self.inventory_probe_window_seen = true;
+        if window.id == self.inventory_probe_container_id && window.id > 0 {
+            self.inventory_probe_container_state_id = window.state_id.0;
+            self.inventory_probe_container_seen = true;
+            info!(
+                "MC-COMPAT-MILESTONE inventory_probe_container_items window={} state_id={} slots={}",
+                window.id, window.state_id.0, slot_count
+            );
+        }
 
         if let Some(Some(stack)) = window.items.data.get(36) {
             if !self.inventory_probe_sword_seen && stack.count == 1 {
