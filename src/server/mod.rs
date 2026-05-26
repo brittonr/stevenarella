@@ -858,37 +858,50 @@ impl Server {
                 .to_ascii_lowercase();
 
             if role == "attacker" {
+                let flag_carrier_death_probe = std::env::var("MC_COMPAT_FLAG_CARRIER_DEATH_PROBE")
+                    .map(|value| value != "0")
+                    .unwrap_or(false);
+                let (attack_x, attack_z, attack_label, attack_yaw) = if flag_carrier_death_probe {
+                    (-38.0, 0.0, "red_flag", 90.0)
+                } else {
+                    (38.0, 0.0, "blue_spawn", -90.0)
+                };
                 match self.active_probe_ticks {
                     620 => {
-                        info!("MC-COMPAT-MILESTONE combat_probe_move_near_blue_spawn x=38.0 y=65.0 z=0.0");
+                        info!(
+                            "MC-COMPAT-MILESTONE combat_probe_move_near_{} x={:.1} y=65.0 z={:.1}",
+                            attack_label, attack_x, attack_z
+                        );
                         if let Some(position) =
                             self.entities.get_component_mut(player, self.position)
                         {
-                            position.position = cgmath::Vector3::new(38.0, 65.0, 0.0);
+                            position.position = cgmath::Vector3::new(attack_x, 65.0, attack_z);
                             position.moved = true;
                         }
                         self.write_packet(packet::play::serverbound::PlayerPositionLook {
-                            x: 38.0,
+                            x: attack_x,
                             y: 65.0,
-                            z: 0.0,
-                            yaw: -90.0,
+                            z: attack_z,
+                            yaw: attack_yaw,
                             pitch: 0.0,
                             on_ground: true,
                         });
                     }
                     621..=980 => {
                         self.write_packet(packet::play::serverbound::PlayerPosition {
-                            x: 38.0,
+                            x: attack_x,
                             y: 65.0,
-                            z: 0.0,
+                            z: attack_z,
                             on_ground: true,
                         });
                     }
                     _ => {}
                 }
 
-                if self.active_probe_ticks >= 900
-                    && self.combat_probe_attacks_sent < 10
+                let attack_start_tick = if flag_carrier_death_probe { 980 } else { 900 };
+                let attack_limit = if flag_carrier_death_probe { 20 } else { 10 };
+                if self.active_probe_ticks >= attack_start_tick
+                    && self.combat_probe_attacks_sent < attack_limit
                     && self.active_probe_ticks % 20 == 0
                 {
                     if let Some(target_id) = self.remote_player_entity_ids.first().copied() {
@@ -1059,7 +1072,17 @@ impl Server {
                     -90.0,
                 )
             };
-            let elapsed = self.active_probe_ticks - FLAG_PROBE_FIRST_TICK;
+            let pickup_only = std::env::var("MC_COMPAT_FLAG_PROBE_PICKUP_ONLY")
+                .map(|value| value != "0")
+                .unwrap_or(false);
+            let first_flag_tick = std::env::var("MC_COMPAT_FLAG_PROBE_FIRST_TICK")
+                .ok()
+                .and_then(|raw| raw.parse::<u32>().ok())
+                .unwrap_or(FLAG_PROBE_FIRST_TICK);
+            if self.active_probe_ticks < first_flag_tick {
+                return;
+            }
+            let elapsed = self.active_probe_ticks - first_flag_tick;
             let cycle = (elapsed / FLAG_PROBE_CYCLE_TICKS) + 1;
             if cycle <= self.flag_probe_repeat_target {
                 let cycle_tick = elapsed % FLAG_PROBE_CYCLE_TICKS;
@@ -1105,7 +1128,7 @@ impl Server {
                             sequence,
                         });
                     }
-                    100 => {
+                    100 if !pickup_only => {
                         info!(
                             "MC-COMPAT-MILESTONE flag_probe_move_to_{}_capture x={:.1} y=65.0 z={:.1} cycle={}",
                             capture_team_name, capture_x, capture_z, cycle
@@ -1125,7 +1148,7 @@ impl Server {
                             on_ground: true,
                         });
                     }
-                    101..=200 => {
+                    101..=200 if !pickup_only => {
                         self.write_packet(packet::play::serverbound::PlayerPosition {
                             x: capture_x,
                             y: 65.0,
