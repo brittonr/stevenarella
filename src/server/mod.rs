@@ -1249,6 +1249,8 @@ impl Server {
                             SpawnPlayer_i32 => on_player_spawn_i32,
                             SpawnPlayer_i32_HeldItem => on_player_spawn_i32_helditem,
                             SpawnPlayer_i32_HeldItem_String => on_player_spawn_i32_helditem_string,
+                            EntityVelocity => on_entity_velocity,
+                            EntityVelocity_i32 => on_entity_velocity_i32,
                             EntityTeleport_f64 => on_entity_teleport_f64,
                             EntityTeleport_i32 => on_entity_teleport_i32,
                             EntityTeleport_i32_i32_NoGround => on_entity_teleport_i32_i32_noground,
@@ -1909,6 +1911,48 @@ impl Server {
         for id in entity_destroy.entity_ids.data {
             if let Some(entity) = self.entity_map.remove(&id) {
                 self.entities.remove_entity(entity);
+            }
+        }
+    }
+
+    fn on_entity_velocity(&mut self, velocity: packet::play::clientbound::EntityVelocity) {
+        self.on_entity_velocity_raw(
+            velocity.entity_id.0,
+            velocity.velocity_x,
+            velocity.velocity_y,
+            velocity.velocity_z,
+        );
+    }
+
+    fn on_entity_velocity_i32(&mut self, velocity: packet::play::clientbound::EntityVelocity_i32) {
+        self.on_entity_velocity_raw(
+            velocity.entity_id,
+            velocity.velocity_x,
+            velocity.velocity_y,
+            velocity.velocity_z,
+        );
+    }
+
+    fn on_entity_velocity_raw(
+        &mut self,
+        entity_id: i32,
+        velocity_x: i16,
+        velocity_y: i16,
+        velocity_z: i16,
+    ) {
+        if self.combat_probe_enabled && (velocity_x != 0 || velocity_y != 0 || velocity_z != 0) {
+            info!(
+                "MC-COMPAT-MILESTONE combat_probe_velocity_observed entity_id={} vx={} vy={} vz={}",
+                entity_id, velocity_x, velocity_y, velocity_z
+            );
+        }
+        if let Some(entity) = self.entity_map.get(&entity_id) {
+            if let Some(velocity) = self.entities.get_component_mut(*entity, self.velocity) {
+                velocity.velocity = cgmath::Vector3::new(
+                    f64::from(velocity_x) / 8000.0,
+                    f64::from(velocity_y) / 8000.0,
+                    f64::from(velocity_z) / 8000.0,
+                );
             }
         }
     }
