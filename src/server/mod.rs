@@ -114,6 +114,7 @@ pub struct Server {
     inventory_probe_wool_seen: bool,
     inventory_probe_hotbar_seen: bool,
     inventory_probe_drop_sent: bool,
+    inventory_probe_pickup_seen: bool,
     inventory_probe_block_place_sent: bool,
     flag_probe_have_flag_seen: bool,
     flag_probe_capture_seen: bool,
@@ -649,6 +650,7 @@ impl Server {
             inventory_probe_wool_seen: false,
             inventory_probe_hotbar_seen: false,
             inventory_probe_drop_sent: false,
+            inventory_probe_pickup_seen: false,
             inventory_probe_block_place_sent: false,
             flag_probe_have_flag_seen: false,
             flag_probe_capture_seen: false,
@@ -1123,6 +1125,7 @@ impl Server {
                             UpdateHealth => on_update_health,
                             WindowItems_StateCarry => on_window_items_state_carry,
                             WindowSetSlot_State => on_window_set_slot_state,
+                            CollectItem => on_collect_item,
                             SetCurrentHotbarSlot => on_set_current_hotbar_slot,
                             DeathMessage_VarInt => on_death_message_varint,
                             PlayerRemove_UUIDs => on_player_remove_uuids,
@@ -2280,6 +2283,16 @@ impl Server {
                         stack.count, stack.id
                     );
                 }
+                if self.inventory_probe_drop_sent
+                    && !self.inventory_probe_pickup_seen
+                    && stack.count == 1
+                {
+                    self.inventory_probe_pickup_seen = true;
+                    info!(
+                        "MC-COMPAT-MILESTONE inventory_probe_pickup_slot36_restored count={} item_id={}",
+                        stack.count, stack.id
+                    );
+                }
             }
         }
         if slot.property == 37 {
@@ -2293,6 +2306,19 @@ impl Server {
                 }
             }
         }
+    }
+
+    fn on_collect_item(&mut self, item: packet::play::clientbound::CollectItem) {
+        if !self.inventory_probe_enabled {
+            return;
+        }
+
+        info!(
+            "MC-COMPAT-MILESTONE inventory_probe_collect_item collected_entity_id={} collector_entity_id={} count={}",
+            item.collected_entity_id.0,
+            item.collector_entity_id.0,
+            item.number_of_items.0,
+        );
     }
 
     fn on_set_current_hotbar_slot(
