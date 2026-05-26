@@ -103,10 +103,13 @@ pub struct Server {
     respawn_probe_enabled: bool,
     inventory_probe_enabled: bool,
     equipment_probe_enabled: bool,
+    projectile_probe_enabled: bool,
     flag_probe_enabled: bool,
     active_probe_ticks: u32,
     active_probe_logged_position_look_sent: bool,
     combat_probe_attacks_sent: u32,
+    projectile_probe_use_item_sent: bool,
+    projectile_probe_swing_sent: bool,
     respawn_probe_requested: bool,
     respawn_probe_death_seen: bool,
     respawn_probe_restored_seen: bool,
@@ -647,12 +650,17 @@ impl Server {
             equipment_probe_enabled: std::env::var("MC_COMPAT_EQUIPMENT_PROBE")
                 .map(|value| value != "0")
                 .unwrap_or(false),
+            projectile_probe_enabled: std::env::var("MC_COMPAT_PROJECTILE_PROBE")
+                .map(|value| value != "0")
+                .unwrap_or(false),
             flag_probe_enabled: std::env::var("MC_COMPAT_FLAG_PROBE")
                 .map(|value| value != "0")
                 .unwrap_or(false),
             active_probe_ticks: 0,
             active_probe_logged_position_look_sent: false,
             combat_probe_attacks_sent: 0,
+            projectile_probe_use_item_sent: false,
+            projectile_probe_swing_sent: false,
             respawn_probe_requested: false,
             respawn_probe_death_seen: false,
             respawn_probe_restored_seen: false,
@@ -761,6 +769,8 @@ impl Server {
             && !self.combat_probe_enabled
             && !self.respawn_probe_enabled
             && !self.inventory_probe_enabled
+            && !self.equipment_probe_enabled
+            && !self.projectile_probe_enabled
             && !self.flag_probe_enabled
         {
             return;
@@ -939,6 +949,31 @@ impl Server {
                     }
                 }
             }
+        }
+
+        if self.projectile_probe_enabled
+            && self.active_probe_ticks >= 900
+            && !self.projectile_probe_use_item_sent
+        {
+            info!("MC-COMPAT-MILESTONE projectile_probe_select_hotbar_slot slot=0");
+            self.write_packet(packet::play::serverbound::HeldItemChange { slot: 0 });
+            info!("MC-COMPAT-MILESTONE projectile_probe_use_item_sent hand=main sequence=303");
+            self.write_packet(packet::play::serverbound::UseItem_WithSequence {
+                hand: protocol::VarInt(0),
+                sequence: protocol::VarInt(303),
+            });
+            self.projectile_probe_use_item_sent = true;
+        }
+
+        if self.projectile_probe_enabled
+            && self.active_probe_ticks >= 920
+            && !self.projectile_probe_swing_sent
+        {
+            info!("MC-COMPAT-MILESTONE projectile_probe_swing_sent hand=main");
+            self.write_packet(packet::play::serverbound::ArmSwing {
+                hand: protocol::VarInt(0),
+            });
+            self.projectile_probe_swing_sent = true;
         }
 
         if self.inventory_probe_enabled && self.active_probe_ticks == 520 {
