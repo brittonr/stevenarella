@@ -94,6 +94,13 @@ const SURVIVAL_CHEST_ITEM_NAME: &str = "Dirt";
 const SURVIVAL_CHEST_RECONNECT_SESSION_LABEL: u32 = 1;
 const EMPTY_WINDOW_ID: u8 = 0;
 const EMPTY_WINDOW_STATE_ID: i32 = -1;
+const NEGATIVE_INVENTORY_INVALID_SLOT: i16 = 127;
+const NEGATIVE_INVENTORY_INVALID_WINDOW_ID: u8 = 127;
+const NEGATIVE_INVENTORY_STALE_STATE_OFFSET: i32 = 1;
+const NEGATIVE_CLICK_BUTTON: u8 = 0;
+const NEGATIVE_CLICK_MODE: i32 = 0;
+const NEGATIVE_CUSTOM_PAYLOAD_TICK: u32 = 420;
+const NEGATIVE_CUSTOM_PAYLOAD_DATA: &[u8] = &[0xff, 0x00, 0xff];
 
 fn parse_flag_probe_repeat_target(value: Option<&str>) -> u32 {
     value
@@ -157,6 +164,8 @@ pub struct Server {
     pub received_chat_at: Option<Instant>,
     logged_first_chunk: bool,
     logged_render_tick_with_player: bool,
+    negative_probe: Option<String>,
+    negative_probe_sent: bool,
     active_probe_enabled: bool,
     team_probe_enabled: bool,
     combat_probe_enabled: bool,
@@ -711,6 +720,10 @@ impl Server {
             received_chat_at: None,
             logged_first_chunk: false,
             logged_render_tick_with_player: false,
+            negative_probe: std::env::var("MC_COMPAT_NEGATIVE_PROBE")
+                .ok()
+                .filter(|probe| !probe.is_empty() && probe != "0"),
+            negative_probe_sent: false,
             active_probe_enabled: std::env::var("MC_COMPAT_ACTIVE_PROBE")
                 .map(|value| value != "0")
                 .unwrap_or(false),
@@ -805,6 +818,15 @@ impl Server {
 
     pub fn is_connected(&self) -> bool {
         self.conn.read().unwrap().is_some()
+    }
+
+    fn negative_probe_is(&self, probe: &str) -> bool {
+        self.negative_probe.as_deref() == Some(probe)
+    }
+
+    fn negative_inventory_probe_selected(&self) -> bool {
+        self.negative_probe_is("inventory_stale_state")
+            || self.negative_probe_is("inventory_invalid_click")
     }
 
     pub fn tick(&mut self, renderer: &mut render::Renderer, delta: f64) {
@@ -923,6 +945,21 @@ impl Server {
                     _ => {}
                 }
             }
+        }
+
+        if self.negative_probe_is("custom_payload_malformed")
+            && self.active_probe_ticks >= NEGATIVE_CUSTOM_PAYLOAD_TICK
+            && !self.negative_probe_sent
+        {
+            info!(
+                "MC-COMPAT-MILESTONE negative_custom_payload_sent channel=mc_compat:malformed bytes={}",
+                NEGATIVE_CUSTOM_PAYLOAD_DATA.len()
+            );
+            self.write_packet(packet::play::serverbound::PluginMessageServerbound {
+                channel: "mc_compat:malformed".into(),
+                data: NEGATIVE_CUSTOM_PAYLOAD_DATA.to_vec(),
+            });
+            self.negative_probe_sent = true;
         }
 
         if self.team_probe_enabled {
@@ -1344,7 +1381,69 @@ impl Server {
             && self.active_probe_ticks >= 680
             && self.inventory_probe_block_place_sent
             && self.inventory_probe_state_id > 0
+            && !self.negative_probe_sent
+            && self.negative_probe_is("inventory_stale_state")
+        {
+            let stale_state_id = self
+                .inventory_probe_state_id
+                .saturating_sub(NEGATIVE_INVENTORY_STALE_STATE_OFFSET);
+            info!(
+                "MC-COMPAT-MILESTONE negative_inventory_stale_state_sent window=0 slot=37 state_id={} expected_current_state_id={}",
+                stale_state_id, self.inventory_probe_state_id
+            );
+            self.write_packet(packet::play::serverbound::ClickWindow_StateBeforeSlot {
+                id: 0,
+                slot: 37,
+                state: protocol::VarInt(stale_state_id),
+                button: NEGATIVE_CLICK_BUTTON,
+                mode: protocol::VarInt(NEGATIVE_CLICK_MODE),
+                slots: protocol::LenPrefixed::new(vec![packet::NumberedSlot {
+                    slot_number: 37,
+                    slot_data: None,
+                }]),
+                clicked_item: Some(item::Stack {
+                    id: 194,
+                    count: 63,
+                    damage: None,
+                    tag: None,
+                }),
+            });
+            self.negative_probe_sent = true;
+            self.inventory_probe_click_sent = true;
+        }
+
+        if self.inventory_probe_enabled
+            && self.active_probe_ticks >= 680
+            && self.inventory_probe_block_place_sent
+            && self.inventory_probe_state_id > 0
+            && !self.negative_probe_sent
+            && self.negative_probe_is("inventory_invalid_click")
+        {
+            info!(
+                "MC-COMPAT-MILESTONE negative_inventory_invalid_click_sent window={} slot={} state_id={}",
+                NEGATIVE_INVENTORY_INVALID_WINDOW_ID,
+                NEGATIVE_INVENTORY_INVALID_SLOT,
+                self.inventory_probe_state_id
+            );
+            self.write_packet(packet::play::serverbound::ClickWindow_StateBeforeSlot {
+                id: NEGATIVE_INVENTORY_INVALID_WINDOW_ID,
+                slot: NEGATIVE_INVENTORY_INVALID_SLOT,
+                state: protocol::VarInt(self.inventory_probe_state_id),
+                button: NEGATIVE_CLICK_BUTTON,
+                mode: protocol::VarInt(NEGATIVE_CLICK_MODE),
+                slots: protocol::LenPrefixed::new(Vec::new()),
+                clicked_item: None,
+            });
+            self.negative_probe_sent = true;
+            self.inventory_probe_click_sent = true;
+        }
+
+        if self.inventory_probe_enabled
+            && self.active_probe_ticks >= 680
+            && self.inventory_probe_block_place_sent
+            && self.inventory_probe_state_id > 0
             && !self.inventory_probe_click_sent
+            && !self.negative_inventory_probe_selected()
         {
             info!(
                 "MC-COMPAT-MILESTONE inventory_probe_click_slot_sent window=0 slot=37 state_id={} \
@@ -1454,6 +1553,20 @@ impl Server {
                 .unwrap_or(FLAG_PROBE_FIRST_TICK);
             if self.active_probe_ticks < first_flag_tick {
                 return;
+            }
+            if self.negative_probe_is("reconnect_race") && !self.negative_probe_sent {
+                info!(
+                    "MC-COMPAT-MILESTONE negative_reconnect_race_attempted target_flag={} pickup_only={} expected=no_score_corruption",
+                    target_flag_name, pickup_only
+                );
+                self.negative_probe_sent = true;
+            }
+            if self.negative_probe_is("ctf_wrong_score") && !self.negative_probe_sent {
+                info!(
+                    "MC-COMPAT-MILESTONE negative_wrong_score_attempted team=red attempted_flag_probe_team={} expected=no_score_milestone",
+                    flag_team
+                );
+                self.negative_probe_sent = true;
             }
             let elapsed = self.active_probe_ticks - first_flag_tick;
             let cycle = (elapsed / FLAG_PROBE_CYCLE_TICKS) + 1;
