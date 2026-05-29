@@ -1643,7 +1643,7 @@ impl Server {
                             .map(|value| value != "0")
                             .unwrap_or(false)
                         {
-                            warn!("MC-COMPAT-NONFATAL packet_decode_failed err={:?}", err);
+                            warn!("MC-COMPAT-NONFATAL packet_parse_ignored");
                             continue;
                         }
                         panic!("Err: {:?}", err)
