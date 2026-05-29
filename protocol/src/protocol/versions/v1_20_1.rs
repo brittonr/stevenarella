@@ -92,6 +92,7 @@ const PLAY_SERVERBOUND_OVERRIDES: &[(i32, i32)] = &[
         0x0b,
         packet::play::serverbound::internal_ids::ClickWindow_StateBeforeSlot,
     ),
+    (0x0c, packet::play::serverbound::internal_ids::CloseWindow),
     (
         0x0d,
         packet::play::serverbound::internal_ids::PluginMessageServerbound,

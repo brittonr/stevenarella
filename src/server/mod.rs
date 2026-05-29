@@ -88,12 +88,12 @@ const SURVIVAL_CHEST_WINDOW_SLOT: i16 = 0;
 const SURVIVAL_CHEST_WINDOW_SLOT_INDEX: usize = 0;
 const SURVIVAL_CHEST_CLICK_BUTTON: u8 = 0;
 const SURVIVAL_CHEST_CLICK_MODE: i32 = 0;
-const SURVIVAL_CHEST_ITEM_PROTOCOL_ID: isize = 9;
+const SURVIVAL_CHEST_ITEM_PROTOCOL_ID: isize = 15;
 const SURVIVAL_CHEST_ITEM_COUNT: isize = 1;
 const SURVIVAL_CHEST_ITEM_NAME: &str = "Dirt";
 const SURVIVAL_CHEST_RECONNECT_SESSION_LABEL: u32 = 1;
 const EMPTY_WINDOW_ID: u8 = 0;
-const EMPTY_WINDOW_STATE_ID: i32 = 0;
+const EMPTY_WINDOW_STATE_ID: i32 = -1;
 
 fn parse_flag_probe_repeat_target(value: Option<&str>) -> u32 {
     value
@@ -875,6 +875,7 @@ impl Server {
             && !self.projectile_probe_enabled
             && !self.flag_probe_enabled
             && !self.survival_probe_enabled
+            && !self.survival_chest_probe_enabled
         {
             return;
         }

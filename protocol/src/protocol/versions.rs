@@ -784,6 +784,10 @@ mod tests {
                 crate::protocol::packet::play::serverbound::internal_ids::ClientStatus,
             ),
             (
+                0x0c,
+                crate::protocol::packet::play::serverbound::internal_ids::CloseWindow,
+            ),
+            (
                 0x0d,
                 crate::protocol::packet::play::serverbound::internal_ids::PluginMessageServerbound,
             ),
