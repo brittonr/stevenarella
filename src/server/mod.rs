@@ -43,6 +43,11 @@ pub mod target;
 const DEFAULT_FLAG_PROBE_REPEAT_TARGET: u32 = 1;
 const MAX_FLAG_PROBE_REPEAT_TARGET: u32 = 8;
 const FLAG_PROBE_FIRST_TICK: u32 = 560;
+const CTF_SCORE_LIMIT_CLIENT_ENV: &str = "MC_COMPAT_SCORE_LIMIT_PROBE";
+const CTF_SCORE_LIMIT_CLIENT_TARGET_SCORE: &str = "RED: 2";
+const CTF_SCORE_LIMIT_CLIENT_OPPOSING_SCORE: &str = "BLUE: 0";
+const CTF_SCORE_LIMIT_CLIENT_WIN_TEAM: &str = "red";
+const CTF_SCORE_LIMIT_CLIENT_END_STATE: &str = "winner_declared";
 const FLAG_PROBE_CYCLE_TICKS: u32 = 220;
 const ACTIVE_PROBE_INPUT_START_TICK: u32 = 1;
 const ACTIVE_PROBE_JUMP_RELEASE_TICK: u32 = 18;
@@ -180,6 +185,8 @@ pub struct Server {
     equipment_probe_enabled: bool,
     projectile_probe_enabled: bool,
     flag_probe_enabled: bool,
+    score_limit_probe_enabled: bool,
+    score_limit_probe_seen: bool,
     active_probe_ticks: u32,
     active_probe_logged_position_look_sent: bool,
     combat_probe_attacks_sent: u32,
@@ -759,6 +766,10 @@ impl Server {
             flag_probe_enabled: std::env::var("MC_COMPAT_FLAG_PROBE")
                 .map(|value| value != "0")
                 .unwrap_or(false),
+            score_limit_probe_enabled: std::env::var(CTF_SCORE_LIMIT_CLIENT_ENV)
+                .map(|value| value != "0")
+                .unwrap_or(false),
+            score_limit_probe_seen: false,
             active_probe_ticks: 0,
             active_probe_logged_position_look_sent: false,
             combat_probe_attacks_sent: 0,
@@ -908,6 +919,7 @@ impl Server {
             && !self.equipment_probe_enabled
             && !self.projectile_probe_enabled
             && !self.flag_probe_enabled
+            && !self.score_limit_probe_enabled
             && !self.survival_probe_enabled
             && !self.survival_chest_probe_enabled
         {
@@ -927,7 +939,8 @@ impl Server {
             || self.inventory_probe_enabled
             || self.equipment_probe_enabled
             || self.projectile_probe_enabled
-            || self.flag_probe_enabled;
+            || self.flag_probe_enabled
+            || self.score_limit_probe_enabled;
         if movement_probe_enabled {
             if let Some(movement) = self
                 .entities
@@ -3647,7 +3660,25 @@ impl Server {
                 }
             }
         }
+        self.log_score_limit_probe_once(&rendered);
         self.received_chat_at = Some(Instant::now());
+    }
+
+    fn log_score_limit_probe_once(&mut self, rendered: &str) {
+        if !self.score_limit_probe_enabled || self.score_limit_probe_seen {
+            return;
+        }
+        if !rendered.contains(CTF_SCORE_LIMIT_CLIENT_TARGET_SCORE)
+            || !rendered.contains(CTF_SCORE_LIMIT_CLIENT_OPPOSING_SCORE)
+        {
+            return;
+        }
+        self.score_limit_probe_seen = true;
+        info!(
+            "MC-COMPAT-MILESTONE ctf_score_limit_win_seen score_limit=2 winning_team={} red_score=2 blue_score=0 end_state={} duplicate_win=false",
+            CTF_SCORE_LIMIT_CLIENT_WIN_TEAM,
+            CTF_SCORE_LIMIT_CLIENT_END_STATE
+        );
     }
 
     fn load_block_entities(&mut self, block_entities: Vec<Option<crate::nbt::NamedTag>>) {
