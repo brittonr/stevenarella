@@ -1590,6 +1590,13 @@ impl Server {
                 );
                 self.negative_probe_sent = true;
             }
+            if self.negative_probe_is("ctf_invalid_pickup_ownership") && !self.negative_probe_sent {
+                info!(
+                    "MC-COMPAT-MILESTONE ctf_invalid_pickup_attempted player_team=red flag_team={} pre_owner=none action=own_flag_pickup expected=no_owner_transfer_no_score",
+                    target_flag_name
+                );
+                self.negative_probe_sent = true;
+            }
             if self.negative_probe_is("reconnect_race")
                 && self.negative_probe_sent
                 && self.flag_probe_have_flag_seen
@@ -1608,6 +1615,18 @@ impl Server {
                 self.log_negative_probe_outcome_once(
                     "negative_wrong_score_contained",
                     "postcondition=no_score_milestone_after_wrong_team_attempt",
+                );
+            }
+            if self.negative_probe_is("ctf_invalid_pickup_ownership")
+                && self.negative_probe_sent
+                && self.active_probe_ticks
+                    >= first_flag_tick + NEGATIVE_FLAG_CONTAINMENT_TICK_OFFSET
+                && !self.flag_probe_have_flag_seen
+                && !self.flag_probe_score_seen
+            {
+                self.log_negative_probe_outcome_once(
+                    "ctf_invalid_pickup_contained",
+                    "player_team=red flag_team=red post_owner=none red_score=0 blue_score=0 outcome=no_owner_transfer_no_score",
                 );
             }
             let elapsed = self.active_probe_ticks - first_flag_tick;
