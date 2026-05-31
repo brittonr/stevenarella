@@ -276,14 +276,31 @@ fn main2() {
     info!("Starting steven");
 
     #[cfg(not(target_arch = "wasm32"))]
-    if let Err(err) = mcp::validate_process_transport_options(&mcp::McpTransportOptions::from_cli(
-        opt.mcp_stdio,
-        opt.mcp_listen.clone(),
-        opt.mcp_token_env.clone(),
-    )) {
-        error!("Invalid MCP transport options: {:?}", err);
-        return;
-    }
+    let _mcp_runtime = {
+        let mcp_options = mcp::McpTransportOptions::from_cli(
+            opt.mcp_stdio,
+            opt.mcp_listen.clone(),
+            opt.mcp_token_env.clone(),
+        );
+        if mcp_options.has_transport() {
+            let validated = match mcp::validate_process_transport_options(&mcp_options) {
+                Ok(validated) => validated,
+                Err(err) => {
+                    error!("Invalid MCP transport options: {:?}", err);
+                    std::process::exit(2);
+                }
+            };
+            match mcp::start_process_transport(validated) {
+                Ok(runtime) => Some(runtime),
+                Err(err) => {
+                    error!("Failed to start MCP transport: {:?}", err);
+                    std::process::exit(2);
+                }
+            }
+        } else {
+            None
+        }
+    };
 
     let (vars, mut vsync) = {
         let mut vars = console::Vars::new();
