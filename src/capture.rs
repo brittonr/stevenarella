@@ -4,9 +4,11 @@
 // http://www.apache.org/licenses/LICENSE-APACHE> or the MIT license
 // <LICENSE-MIT or http://opensource.org/licenses/MIT>, at your option.
 
+use crate::gl;
 use std::path::{Component, Path, PathBuf};
 
 pub const BLAKE3_HEX_LENGTH: usize = 64;
+pub const RGBA_BYTES_PER_PIXEL: usize = 4;
 pub const DEFAULT_MAX_WIDTH_PX: u32 = 7_680;
 pub const DEFAULT_MAX_HEIGHT_PX: u32 = 4_320;
 pub const DEFAULT_MIN_RECORDING_FPS: u16 = 1;
@@ -17,6 +19,8 @@ pub const DEFAULT_MAX_ARTIFACT_BYTES: u64 = 32 * 1024 * 1024;
 pub const DEFAULT_INLINE_RESPONSE_BYTES: u64 = 512 * 1024;
 
 const FORMAT_PNG: &str = "png";
+const FRAMEBUFFER_READ_ORIGIN_X: i32 = 0;
+const FRAMEBUFFER_READ_ORIGIN_Y: i32 = 0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum CaptureMode {
@@ -110,6 +114,21 @@ pub struct CaptureArtifactMetadata {
     pub blake3_digest: Blake3DigestHex,
     pub includes_ui: bool,
     pub redaction: RedactionState,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct CapturedRgbaFrame {
+    pub width_px: u32,
+    pub height_px: u32,
+    pub frame_id: u64,
+    pub rgba_top_left: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum CaptureReadbackError {
+    InvalidDimensions { width_px: u32, height_px: u32 },
+    BufferSizeOverflow { width_px: u32, height_px: u32 },
+    BufferLengthMismatch { expected: usize, actual: usize },
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -219,6 +238,99 @@ pub fn validate_dimensions(
     Ok(())
 }
 
+pub fn read_current_framebuffer_rgba_top_left(
+    width_px: u32,
+    height_px: u32,
+    frame_id: u64,
+) -> Result<CapturedRgbaFrame, CaptureReadbackError> {
+    let expected_len = rgba_buffer_len(width_px, height_px)?;
+    let mut rgba_bottom_left = vec![0; expected_len];
+    gl::read_pixels_rgba(
+        FRAMEBUFFER_READ_ORIGIN_X,
+        FRAMEBUFFER_READ_ORIGIN_Y,
+        width_px,
+        height_px,
+        &mut rgba_bottom_left,
+    );
+    captured_rgba_from_bottom_left(width_px, height_px, frame_id, &rgba_bottom_left)
+}
+
+pub fn captured_rgba_from_bottom_left(
+    width_px: u32,
+    height_px: u32,
+    frame_id: u64,
+    rgba_bottom_left: &[u8],
+) -> Result<CapturedRgbaFrame, CaptureReadbackError> {
+    Ok(CapturedRgbaFrame {
+        width_px,
+        height_px,
+        frame_id,
+        rgba_top_left: normalize_rgba_bottom_left_to_top_left(
+            width_px,
+            height_px,
+            rgba_bottom_left,
+        )?,
+    })
+}
+
+pub fn normalize_rgba_bottom_left_to_top_left(
+    width_px: u32,
+    height_px: u32,
+    rgba_bottom_left: &[u8],
+) -> Result<Vec<u8>, CaptureReadbackError> {
+    let expected_len = rgba_buffer_len(width_px, height_px)?;
+    if rgba_bottom_left.len() != expected_len {
+        return Err(CaptureReadbackError::BufferLengthMismatch {
+            expected: expected_len,
+            actual: rgba_bottom_left.len(),
+        });
+    }
+
+    let row_stride = rgba_row_stride_bytes(width_px, height_px)?;
+    let mut rgba_top_left = vec![0; expected_len];
+    for top_row in 0..height_px as usize {
+        let bottom_row = (height_px as usize) - top_row - 1;
+        let source_start = bottom_row * row_stride;
+        let target_start = top_row * row_stride;
+        let source_end = source_start + row_stride;
+        let target_end = target_start + row_stride;
+        rgba_top_left[target_start..target_end]
+            .copy_from_slice(&rgba_bottom_left[source_start..source_end]);
+    }
+
+    Ok(rgba_top_left)
+}
+
+pub fn rgba_buffer_len(width_px: u32, height_px: u32) -> Result<usize, CaptureReadbackError> {
+    validate_readback_dimensions(width_px, height_px)?;
+    let row_stride = rgba_row_stride_bytes(width_px, height_px)?;
+    row_stride
+        .checked_mul(height_px as usize)
+        .ok_or(CaptureReadbackError::BufferSizeOverflow {
+            width_px,
+            height_px,
+        })
+}
+
+fn validate_readback_dimensions(width_px: u32, height_px: u32) -> Result<(), CaptureReadbackError> {
+    if width_px == 0 || height_px == 0 {
+        return Err(CaptureReadbackError::InvalidDimensions {
+            width_px,
+            height_px,
+        });
+    }
+    Ok(())
+}
+
+fn rgba_row_stride_bytes(width_px: u32, height_px: u32) -> Result<usize, CaptureReadbackError> {
+    (width_px as usize).checked_mul(RGBA_BYTES_PER_PIXEL).ok_or(
+        CaptureReadbackError::BufferSizeOverflow {
+            width_px,
+            height_px,
+        },
+    )
+}
+
 fn validate_artifact_size(
     byte_len: u64,
     policy: &CapturePolicy,
@@ -319,6 +431,13 @@ mod tests {
     const TEST_RECORDING_FPS: u16 = 30;
     const TEST_RECORDING_FRAMES: u32 = 10;
     const TEST_BLAKE3: &str = "0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef";
+    const TEST_READBACK_WIDTH_PX: u32 = 2;
+    const TEST_READBACK_HEIGHT_PX: u32 = 2;
+    const TEST_OPAQUE_ALPHA: u8 = u8::MAX;
+    const TEST_BOTTOM_LEFT_PIXEL: [u8; RGBA_BYTES_PER_PIXEL] = [10, 20, 30, TEST_OPAQUE_ALPHA];
+    const TEST_BOTTOM_RIGHT_PIXEL: [u8; RGBA_BYTES_PER_PIXEL] = [40, 50, 60, TEST_OPAQUE_ALPHA];
+    const TEST_TOP_LEFT_PIXEL: [u8; RGBA_BYTES_PER_PIXEL] = [70, 80, 90, TEST_OPAQUE_ALPHA];
+    const TEST_TOP_RIGHT_PIXEL: [u8; RGBA_BYTES_PER_PIXEL] = [100, 110, 120, TEST_OPAQUE_ALPHA];
 
     #[test]
     fn valid_screenshot_artifact_request_is_planned() {
@@ -385,6 +504,70 @@ mod tests {
         assert_eq!(
             path,
             PathBuf::from(TEST_CAPTURE_DIR).join(TEST_ARTIFACT_PATH)
+        );
+    }
+
+    #[test]
+    fn rgba_readback_normalizes_gl_bottom_left_origin() {
+        let rgba_bottom_left = [
+            TEST_BOTTOM_LEFT_PIXEL,
+            TEST_BOTTOM_RIGHT_PIXEL,
+            TEST_TOP_LEFT_PIXEL,
+            TEST_TOP_RIGHT_PIXEL,
+        ]
+        .concat();
+        let expected_top_left = [
+            TEST_TOP_LEFT_PIXEL,
+            TEST_TOP_RIGHT_PIXEL,
+            TEST_BOTTOM_LEFT_PIXEL,
+            TEST_BOTTOM_RIGHT_PIXEL,
+        ]
+        .concat();
+
+        let frame = captured_rgba_from_bottom_left(
+            TEST_READBACK_WIDTH_PX,
+            TEST_READBACK_HEIGHT_PX,
+            TEST_FRAME_ID,
+            &rgba_bottom_left,
+        )
+        .expect("valid RGBA readback should normalize");
+
+        assert_eq!(frame.width_px, TEST_READBACK_WIDTH_PX);
+        assert_eq!(frame.height_px, TEST_READBACK_HEIGHT_PX);
+        assert_eq!(frame.frame_id, TEST_FRAME_ID);
+        assert_eq!(frame.rgba_top_left, expected_top_left);
+    }
+
+    #[test]
+    fn rgba_readback_rejects_wrong_buffer_length() {
+        let expected = rgba_buffer_len(TEST_READBACK_WIDTH_PX, TEST_READBACK_HEIGHT_PX)
+            .expect("fixture dimensions should pass");
+        let actual = expected - RGBA_BYTES_PER_PIXEL;
+        let short_buffer = vec![0; actual];
+
+        let err = normalize_rgba_bottom_left_to_top_left(
+            TEST_READBACK_WIDTH_PX,
+            TEST_READBACK_HEIGHT_PX,
+            &short_buffer,
+        )
+        .expect_err("short buffer rejected");
+
+        assert_eq!(
+            err,
+            CaptureReadbackError::BufferLengthMismatch { expected, actual }
+        );
+    }
+
+    #[test]
+    fn rgba_readback_rejects_empty_dimensions() {
+        let err = rgba_buffer_len(TEST_READBACK_WIDTH_PX, 0).expect_err("height rejected");
+
+        assert_eq!(
+            err,
+            CaptureReadbackError::InvalidDimensions {
+                width_px: TEST_READBACK_WIDTH_PX,
+                height_px: 0,
+            }
         );
     }
 

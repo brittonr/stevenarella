@@ -58,6 +58,20 @@ pub fn draw_elements(ty: DrawType, count: i32, dty: Type, offset: usize) {
     }
 }
 
+pub fn read_pixels_rgba(x: i32, y: i32, width: u32, height: u32, pixels: &mut [u8]) {
+    unsafe {
+        glow_context().read_pixels(
+            x,
+            y,
+            width as i32,
+            height as i32,
+            gl::RGBA,
+            gl::UNSIGNED_BYTE,
+            PixelPackData::Slice(pixels),
+        );
+    }
+}
+
 // Sets the size of the viewport of this context.
 pub fn viewport(x: i32, y: i32, w: i32, h: i32) {
     unsafe {
