@@ -35,6 +35,7 @@ use steven_protocol::types;
 pub mod auth;
 pub mod chunk_builder;
 pub mod console;
+pub mod control;
 pub mod entity;
 pub mod model;
 pub mod render;
