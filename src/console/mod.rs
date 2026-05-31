@@ -245,6 +245,7 @@ pub struct Console {
     logfile: fs::File,
     log_level_term: log::Level,
     log_level_file: log::Level,
+    terminal_output_enabled: bool,
 
     elements: Option<ConsoleElements>,
     active: bool,
@@ -270,6 +271,7 @@ impl Console {
             logfile: fs::File::create("client.log").expect("failed to open log file"),
             log_level_term: log::Level::Info,
             log_level_file: log::Level::Trace,
+            terminal_output_enabled: true,
 
             elements: None,
             active: false,
@@ -284,6 +286,10 @@ impl Console {
 
     pub fn is_active(&self) -> bool {
         self.active
+    }
+
+    pub fn set_terminal_output_enabled(&mut self, enabled: bool) {
+        self.terminal_output_enabled = enabled;
     }
 
     pub fn toggle(&mut self) {
@@ -388,7 +394,7 @@ impl Console {
             self.logfile.write_all(b"\n").unwrap();
         }
 
-        if record.level() <= self.log_level_term {
+        if self.terminal_output_enabled && record.level() <= self.log_level_term {
             println_level(record.level(), line);
         }
 

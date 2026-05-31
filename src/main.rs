@@ -37,6 +37,8 @@ pub mod chunk_builder;
 pub mod console;
 pub mod control;
 pub mod entity;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod mcp;
 pub mod model;
 pub mod render;
 pub mod resources;
@@ -208,6 +210,21 @@ struct Opt {
     /// Protocol version to use in the autodetection ping
     #[structopt(short = "p", long = "default-protocol-version")]
     default_protocol_version: Option<String>,
+
+    /// Enable MCP over stdio. Stdout is reserved for JSON-RPC while active.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[structopt(long = "mcp-stdio")]
+    mcp_stdio: bool,
+
+    /// Enable MCP over a TCP socket, e.g. 127.0.0.1:4700.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[structopt(long = "mcp-listen")]
+    mcp_listen: Option<String>,
+
+    /// Environment variable containing the MCP token for non-loopback TCP binds.
+    #[cfg(not(target_arch = "wasm32"))]
+    #[structopt(long = "mcp-token-env")]
+    mcp_token_env: Option<String>,
 }
 
 cfg_if! {
@@ -247,12 +264,26 @@ fn main2() {
     init_config_dir();
     let opt = Opt::from_args();
     let con = Arc::new(Mutex::new(console::Console::new()));
+    #[cfg(not(target_arch = "wasm32"))]
+    if opt.mcp_stdio {
+        con.lock().unwrap().set_terminal_output_enabled(false);
+    }
     let proxy = console::ConsoleProxy::new(con.clone());
 
     log::set_boxed_logger(Box::new(proxy)).unwrap();
     log::set_max_level(log::LevelFilter::Trace);
 
     info!("Starting steven");
+
+    #[cfg(not(target_arch = "wasm32"))]
+    if let Err(err) = mcp::validate_process_transport_options(&mcp::McpTransportOptions::from_cli(
+        opt.mcp_stdio,
+        opt.mcp_listen.clone(),
+        opt.mcp_token_env.clone(),
+    )) {
+        error!("Invalid MCP transport options: {:?}", err);
+        return;
+    }
 
     let (vars, mut vsync) = {
         let mut vars = console::Vars::new();
